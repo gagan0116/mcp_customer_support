@@ -5,18 +5,22 @@ from pypdf import PdfReader
 # Initialize FastMCP server
 mcp = FastMCP("doc_server")
 
-ARTIFACTS_DIR = "artifacts"
+# Use absolute path for artifacts to avoid "file not found" errors
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# Go up one level to project root, then into artifacts
+PROJECT_ROOT = os.path.dirname(BASE_DIR)
+ARTIFACTS_DIR = os.path.join(PROJECT_ROOT, "artifacts")
 
 @mcp.tool()
 def parse_invoice(pdf_path: str) -> str:
     """
-    Parse a PDF invoice and save the extracted text to the artifacts directory.
+    Parse a PDF invoice, save the text to artifacts, and return the content.
 
     Args:
-        pdf_path: The path to the PDF file to parse.
+        pdf_path: The absolute path to the PDF file to parse.
 
     Returns:
-        A message indicating where the parsed text has been saved.
+        The extracted text content from the PDF.
     """
     if not os.path.exists(pdf_path):
         return f"Error: File not found at {pdf_path}"
@@ -38,7 +42,8 @@ def parse_invoice(pdf_path: str) -> str:
         with open(output_file, "w", encoding="utf-8") as f:
             f.write(text)
             
-        return f"Successfully parsed {base_name}. Text saved to {output_file}"
+        # Return the actual text so the LLM can use it immediately
+        return f"Successfully parsed. Saved to {output_file}\n\nEXTRACTED TEXT:\n{text}"
 
     except Exception as e:
         return f"Error parsing PDF: {str(e)}"
