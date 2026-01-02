@@ -10,7 +10,7 @@ from doc_server import parse_invoice
 def main():
     # 1. Define the path to a sample PDF
     # Make sure you have a file named 'sample.pdf' in your root folder!
-    pdf_path = os.path.join(os.getcwd(), "artifacts/sample_invoice.pdf")
+    pdf_path = os.path.join(os.getcwd(), "artifacts/212_invoice.pdf")
     
     print(f"Testing invoice parsing on: {pdf_path}")
     
