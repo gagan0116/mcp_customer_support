@@ -1,0 +1,17 @@
+# Python virtual environment
+.venv/
+venv/
+ENV/
+
+# Python cache files
+__pycache__/
+*.pyc
+
+# VS Code settings (optional, but recommended for personal projects)
+.vscode/
+
+# Project Artifacts (Generated parsed text files)
+# We ignore the folder contents but you might want to keep the folder itself
+artifacts/*
+!artifacts/.gitkeep
+!artifacts/sample_invoice.pdf
