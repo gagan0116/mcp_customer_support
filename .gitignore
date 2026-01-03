@@ -15,7 +15,4 @@ token.json
 .vscode/
 
 # Project Artifacts (Generated parsed text files)
-# We ignore the folder contents but you might want to keep the folder itself
-artifacts/*
-!artifacts/.gitkeep
-!artifacts/sample_invoice.pdf
+# artifacts/*
