@@ -32,7 +32,7 @@ async def run():
             # 3. (Optional) Call the tool directly to test connection
             # This simulates the Agent deciding to call the tool
             print("\n--- Testing Tool Call ---")
-            pdf_path = os.path.abspath("artifacts/212_invoice.pdf")
+            pdf_path = os.path.abspath("artifacts/INVOICE.pdf")
             
             if os.path.exists(pdf_path):
                 result = await session.call_tool("parse_invoice", arguments={"pdf_path": pdf_path})
