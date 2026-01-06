@@ -350,14 +350,12 @@ def main():
         raise RuntimeError("Set GEMINI_API_KEY")
 
     conn = psycopg.connect(
-        host="localhost",
-        port=5432,
-        dbname="refunds_db",
-        user="postgres",
-        password="#ViratRCB@18",
-    )
-    # Enable autocommit for simpler transaction handling if preferred,
-    # but using explicit commit() below is safer.
+    host=os.getenv("DB_HOST", "localhost"),
+    port=int(os.getenv("DB_PORT", "5432")),
+    dbname=os.getenv("DB_NAME", "refunds_db"),
+    user=os.getenv("DB_USER", "postgres"),
+    password=os.getenv("DB_PASSWORD"),
+)
 
     selected_pdfs = move_selected_invoices()
     all_sql: List[str] = []

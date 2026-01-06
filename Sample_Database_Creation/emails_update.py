@@ -1,4 +1,8 @@
 import psycopg
+import os
+
+from dotenv import load_dotenv
+load_dotenv()
 
 # 1. Email list (must match number of rows you want to update)
 emails= ['satish17.amara@gmail.com', 
@@ -19,11 +23,11 @@ emails= ['satish17.amara@gmail.com',
 
 # 2. DB connection
 conn = psycopg.connect(
-    host="localhost",
-    port=5432,
-    dbname="refunds_db",
-    user="postgres",
-    password="#ViratRCB@18",
+    host=os.getenv("DB_HOST", "localhost"),
+    port=int(os.getenv("DB_PORT", "5432")),
+    dbname=os.getenv("DB_NAME", "refunds_db"),
+    user=os.getenv("DB_USER", "postgres"),
+    password=os.getenv("DB_PASSWORD"),
 )
 
 try:
