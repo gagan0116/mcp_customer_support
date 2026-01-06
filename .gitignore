@@ -10,6 +10,10 @@ __pycache__/
 # Secret Files
 credentials.json
 token.json
+.env
+
+invoices/*
+Sample_Database_Creation/invoice.sql
 
 # VS Code settings (optional, but recommended for personal projects)
 .vscode/
