@@ -20,3 +20,5 @@ Sample_Database_Creation/invoice.sql
 
 # Project Artifacts (Generated parsed text files)
 # artifacts/*
+
+db_tester.py
