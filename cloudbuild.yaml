@@ -25,3 +25,6 @@ steps:
 
 substitutions:
   _IMAGE: "us-central1-docker.pkg.dev/PROJECT_ID/gmail-images/gmail-extractor"
+
+options:
+  logging: CLOUD_LOGGING_ONLY
