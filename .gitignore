@@ -22,3 +22,4 @@ Sample_Database_Creation/invoice.sql
 # artifacts/*
 
 db_tester.py
+llm_query_tester.py

@@ -622,6 +622,16 @@ email_info:
             "candidates": [],
             "error": "gemini_call_failed",
         }
+    
+@mcp.tool()
+def llm_find_orders(email_info: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Use Gemini to generate a safe SELECT query (schema + email_info) and execute it.
+    Returns candidate rows for human review.
+    """
+    from db_verification.llm_sql_runner import llm_generate_and_execute  # local import to avoid import-time issues
+
+    return llm_generate_and_execute(email_info=email_info)
 
 if __name__ == "__main__":
     mcp.run(transport="stdio")
