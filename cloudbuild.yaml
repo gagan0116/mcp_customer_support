@@ -1,11 +1,24 @@
 steps:
+  # Step 1: Build Docker image from subfolder
   - name: "gcr.io/cloud-builders/docker"
     dir: "gmail-event-processor"
-    args: ["build", "-t", "$_IMAGE", "."]
+    args:
+      [
+        "build",
+        "-t",
+        "northamerica-northeast1-docker.pkg.dev/vara-483300/gmail-images/gmail-extractor",
+        "."
+      ]
 
+  # Step 2: Push image to Artifact Registry
   - name: "gcr.io/cloud-builders/docker"
-    args: ["push", "$_IMAGE"]
+    args:
+      [
+        "push",
+        "northamerica-northeast1-docker.pkg.dev/vara-483300/gmail-images/gmail-extractor"
+      ]
 
+  # Step 3: Deploy to Cloud Run
   - name: "gcr.io/cloud-builders/gcloud"
     args:
       [
@@ -13,18 +26,15 @@ steps:
         "deploy",
         "gmail-extractor",
         "--image",
-        "$_IMAGE",
+        "northamerica-northeast1-docker.pkg.dev/vara-483300/gmail-images/gmail-extractor",
         "--region",
-        "us-central1",
+        "northamerica-northeast1",
         "--platform",
         "managed",
         "--allow-unauthenticated",
         "--service-account",
-        "gmail-processor@PROJECT_ID.iam.gserviceaccount.com"
+        "mcp-runtime@vara-483300.iam.gserviceaccount.com"
       ]
-
-substitutions:
-  _IMAGE: "us-central1-docker.pkg.dev/PROJECT_ID/gmail-images/gmail-extractor"
 
 options:
   logging: CLOUD_LOGGING_ONLY
