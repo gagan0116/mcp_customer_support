@@ -24,6 +24,7 @@ def extract_body(payload):
     return ""
 
 def process_new_emails():
+    print("Im in gmail processor")
     token = load_gmail_token()
 
     creds = Credentials(

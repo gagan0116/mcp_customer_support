@@ -2,6 +2,8 @@ from google.cloud import secretmanager
 import json
 
 PROJECT_ID = "vara-483300"
+import os
+
 
 def access_secret(secret_name):
     client = secretmanager.SecretManagerServiceClient()
@@ -10,6 +12,7 @@ def access_secret(secret_name):
     return response.payload.data.decode("utf-8")
 
 def load_gmail_token():
+
     return json.loads(access_secret("gmail_token"))
 
 def load_gemini_api_key():

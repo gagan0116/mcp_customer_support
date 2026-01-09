@@ -1,9 +1,13 @@
 from google.cloud import firestore
+import os
+
+
 
 db = firestore.Client()
 DOC = db.collection("gmail_state").document("history")
 
 def load_history_id() -> int:
+
     doc = DOC.get()
     if not doc.exists:
         # First run — Gmail watch start point

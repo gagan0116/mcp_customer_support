@@ -17,7 +17,7 @@ async def pubsub_handler(request: Request):
             base64.b64decode(data).decode("utf-8")
         from gmail_processor import process_new_emails
         process_new_emails()
-
+        print("done processing email")
         return {"status": "ok"}
 
     except Exception as e:
