@@ -5,16 +5,23 @@ app = FastAPI()
 
 @app.post("/pubsub/gmail")
 async def pubsub_handler(request: Request):
-    envelope = await request.json()
+    try:
+        envelope = await request.json()
 
-    if "message" not in envelope:
-        return {"status": "ignored"}
+        if "message" not in envelope:
+            return {"status": "ignored"}
 
-    # Decode message (optional, but fine)
-    base64.b64decode(envelope["message"]["data"]).decode()
+        # Decode for completeness (not strictly required)
+        data = envelope["message"].get("data")
+        if data:
+            base64.b64decode(data).decode("utf-8")
+        from gmail_processor import process_new_emails
+        process_new_emails()
 
-  
-    from gmail_processor import process_new_emails
-    process_new_emails()
+        return {"status": "ok"}
 
-    return {"status": "ok"}
+    except Exception as e:
+        # VERY IMPORTANT: log but ACK
+        print("❌ Error processing Pub/Sub message:", e)
+        return {"status": "error-acked"}
+
