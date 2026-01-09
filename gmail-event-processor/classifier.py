@@ -1,6 +1,6 @@
 import json
 import google.generativeai as genai
-from secrets import load_gemini_api_key
+from secret_manager import load_gemini_api_key
 
 CONFIDENCE_THRESHOLD = 0.75
 

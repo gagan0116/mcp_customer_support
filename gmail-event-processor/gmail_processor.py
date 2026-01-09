@@ -3,7 +3,7 @@ from bs4 import BeautifulSoup
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
 
-from secrets import load_gmail_token
+from secret_manager import load_gmail_token
 from history_store import load_history_id, save_history_id
 from classifier import classify_email, CONFIDENCE_THRESHOLD
 
