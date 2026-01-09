@@ -10,7 +10,7 @@ def access_secret(secret_name):
     return response.payload.data.decode("utf-8")
 
 def load_gmail_token():
-    return json.loads(access_secret("gmail-token"))
+    return json.loads(access_secret("gmail_token"))
 
 def load_gemini_api_key():
     return access_secret("gemini-api-key")
