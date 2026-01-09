@@ -1,7 +1,7 @@
 from google.cloud import secretmanager
 import json
 
-PROJECT_ID = "YOUR_PROJECT_ID"
+PROJECT_ID = "vara-483300"
 
 def access_secret(secret_name):
     client = secretmanager.SecretManagerServiceClient()
