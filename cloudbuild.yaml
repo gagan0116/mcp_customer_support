@@ -1,0 +1,27 @@
+steps:
+  - name: "gcr.io/cloud-builders/docker"
+    dir: "gmail-event-processor"
+    args: ["build", "-t", "$_IMAGE", "."]
+
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "$_IMAGE"]
+
+  - name: "gcr.io/cloud-builders/gcloud"
+    args:
+      [
+        "run",
+        "deploy",
+        "gmail-extractor",
+        "--image",
+        "$_IMAGE",
+        "--region",
+        "us-central1",
+        "--platform",
+        "managed",
+        "--allow-unauthenticated",
+        "--service-account",
+        "gmail-processor@PROJECT_ID.iam.gserviceaccount.com"
+      ]
+
+substitutions:
+  _IMAGE: "us-central1-docker.pkg.dev/PROJECT_ID/gmail-images/gmail-extractor"
