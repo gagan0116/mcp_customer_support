@@ -1,8 +1,5 @@
 import base64
-import json
 from fastapi import FastAPI, Request
-
-from gmail_processor import process_new_emails
 
 app = FastAPI()
 
@@ -13,9 +10,11 @@ async def pubsub_handler(request: Request):
     if "message" not in envelope:
         return {"status": "ignored"}
 
-    # Decode message (not strictly needed, but good practice)
+    # Decode message (optional, but fine)
     base64.b64decode(envelope["message"]["data"]).decode()
 
+  
+    from gmail_processor import process_new_emails
     process_new_emails()
 
     return {"status": "ok"}
