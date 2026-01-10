@@ -24,7 +24,8 @@ def extract_body(payload):
     return ""
 
 def process_new_emails():
-    print("Im in gmail processor")
+    print("📥 Entered process_new_emails")
+
     token = load_gmail_token()
 
     creds = Credentials(
@@ -39,16 +40,38 @@ def process_new_emails():
     service = build("gmail", "v1", credentials=creds)
 
     last_history_id = load_history_id()
+
+    # ---- FIRST RUN BOOTSTRAP ----
     if not last_history_id:
+        print("🆕 First run: initializing historyId")
+        profile = service.users().getProfile(userId="me").execute()
+        new_history_id = int(profile["historyId"])
+        save_history_id(new_history_id)
+        print("💾 Saved initial historyId:", new_history_id)
         return
 
-    history = service.users().history().list(
+    # ---- FETCH DELTA ----
+    history_response = service.users().history().list(
         userId="me",
         startHistoryId=last_history_id,
         historyTypes=["messageAdded"]
     ).execute()
 
-    for h in history.get("history", []):
+    histories = history_response.get("history", [])
+
+    if not histories:
+        print("📭 No new emails")
+        # Still advance cursor
+        new_history_id = int(history_response["historyId"])
+        save_history_id(new_history_id)
+        print("💾 Updated historyId:", new_history_id)
+        return
+
+    max_history_id = last_history_id
+
+    for h in histories:
+        max_history_id = max(max_history_id, int(h["id"]))
+
         for msg in h.get("messagesAdded", []):
             msg_id = msg["message"]["id"]
 
@@ -68,4 +91,6 @@ def process_new_emails():
             ):
                 print("✅ HIGH CONFIDENCE RETURN:", classification)
 
-            save_history_id(int(h["id"]))
+    # ---- SAVE CURSOR ONCE ----
+    save_history_id(max_history_id)
+    print("💾 Final historyId saved:", max_history_id)
