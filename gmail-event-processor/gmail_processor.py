@@ -84,7 +84,7 @@ def process_new_emails():
             body = extract_body(email["payload"])
 
             classification = classify_email(subject, body)
-
+            print(classification)
             if (
                 classification["category"] == "RETURN"
                 and classification["confidence"] >= CONFIDENCE_THRESHOLD
