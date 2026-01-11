@@ -30,7 +30,7 @@ cloud_sql.py
 generate_invoice_insert_sql.py
 intitial_subscriber.py
 push_filtered_invoices.py
-
+storage_token.json
 token.json
 client_secret_*.json
 history_id.txt

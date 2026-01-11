@@ -6,7 +6,7 @@ steps:
       [
         "build",
         "-t",
-        "northamerica-northeast1-docker.pkg.dev/vara-483300/gmail-images/gmail-extractor",
+        "northamerica-northeast1-docker.pkg.dev/vara-483300/gmail-images/gmail-processor",
         "."
       ]
 
@@ -15,7 +15,7 @@ steps:
     args:
       [
         "push",
-        "northamerica-northeast1-docker.pkg.dev/vara-483300/gmail-images/gmail-extractor"
+        "northamerica-northeast1-docker.pkg.dev/vara-483300/gmail-images/gmail-processor"
       ]
 
   # Step 3: Deploy to Cloud Run
@@ -24,9 +24,9 @@ steps:
       [
         "run",
         "deploy",
-        "gmail-extractor",
+        "gmail-processor",
         "--image",
-        "northamerica-northeast1-docker.pkg.dev/vara-483300/gmail-images/gmail-extractor",
+        "northamerica-northeast1-docker.pkg.dev/vara-483300/gmail-images/gmail-processor",
         "--region",
         "northamerica-northeast1",
         "--platform",
