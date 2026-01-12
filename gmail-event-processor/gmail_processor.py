@@ -177,16 +177,17 @@ def process_new_emails():
             ):
                 print("✅ High confidence RETURN detected")
 
-            results.append(
-                {
-                    "category": classification["category"],
-                    "confidence": classification["confidence"],
-                    "user_id": user_id,
-                    "received_at": received_at,
-                    "email_body": body,
-                    "attachments": attachments,
-                }
-            )
+            if classification["category"].lower() in {"return", "replacement", "refund"}:
+                results.append(
+                    {
+                        "category": classification["category"],
+                        "confidence": classification["confidence"],
+                        "user_id": user_id,
+                        "received_at": received_at,
+                        "email_body": body,
+                        "attachments": attachments,
+                    }
+                )
 
     save_history_id(max_history_id)
     return results
