@@ -114,7 +114,7 @@ class RefundsClient:
                 }}
             ],
             "return_category": "string (RETURN / REPLACEMENT / REFUND)",
-            "return_reason": "string (Summary of why they want a return/refund)",
+            "return_reason": "string (Detailed summary of the reason for return/refund)",
             "confidence_score": "number (0.0 to 1.0 - how confident are you in this extraction)"
         }}
 
@@ -170,29 +170,31 @@ class RefundsClient:
             
             STEP 1: IDENTITY CHECK
             - Call 'verify_from_email_matches_customer' with the customer_email.
-            - IF 'matched' is False: STOP. Do not proceed to find orders. Output "Validation Failed: Email does not match."
+            - IF 'matched' is False: 
+                - DO NOT stop. Instead, call 'llm_find_orders' to search the database using SQL for any helpful info.
+                - Then TIMMEDIATELY TERMINATE with reason "Request sent for Human Review".
             - IF 'matched' is True: Proceed to Step 2.
             
-            STEP 2: FIND ORDER (Hierarchical Search)
+            STEP 2: EXACT ORDER MATCH (Only if Identity Matched)
             - ATTEMPT 1: If 'order_invoice_id' exists in data, call 'find_order_by_order_invoice_id'.
-              - If found, you are DONE. Return the order details.
-            - ATTEMPT 2: If finding by ID failed or ID was missing, check if 'invoice_number' exists in data.
+              - If found, you are DONE. Terminate with "Verification Successful".
+            - ATTEMPT 2: If ID failed, check if 'invoice_number' exists in data.
               - If yes, call 'find_order_by_invoice_number'.
-              - If found, you are DONE.
-            - ATTEMPT 3: If specific searches fail, call 'get_customer_orders_with_items' to get a list of recent orders.
-              - Then immediately call 'select_order_id' passing that usage data to pick the best one.
-              - If a 'selected_order_id' is returned, specific logic to confirm it? No, just accept the selection.
-            - ATTEMPT 4: If all else fails, call 'llm_find_orders' to search via SQL.
+              - If found, you are DONE. Terminate with "Verification Successful".
+            - IF BOTH FAIL: Proceed to Step 3.
             
-            STEP 3: REPORT
-            - If an order is found in any step, output "Verification Successful" and ensure you copy the full order JSON into 'verified_data'.
-            - If completely stuck after all attempts, output "Sending for Human Review".
+            STEP 3: FUZZY SEARCH / HUMAN REVIEW (If Exact Match Failed)
+            - Call 'get_customer_orders_with_items' to get a list of recent orders for this customer.
+            - Call 'select_order_id' passing that usage data to pick the best candidate.
+            - Regardless of the result, TERMINATE with reason "Request sent for Human Review".
+              (If a candidate order was found, include it in 'verified_data' so the reviewer can see it).
+            - If 'select_order_id' fails, you may try 'llm_find_orders' as a last resort before "Request sent for Human Review".
             
             INSTRUCTIONS:
             - Decide the NEXT SINGLE Action.
             - Output JSON ONLY: { "tool_name": "...", "arguments": { ... } }
             - If you are done or need to stop, output JSON: { "action": "terminate", "reason": "...", "verified_data": object|null }
-              (If verification was successful, you MUST include the full retrieved order details in the 'verified_data' field).
+              (Always include the best-known order details in 'verified_data' if available, even for Human Review).
             """
         ]
 
