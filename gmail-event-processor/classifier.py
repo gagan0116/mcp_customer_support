@@ -46,7 +46,11 @@ def classify_email(subject, body):
     )
 
     result = json.loads(response.text)
-
+    if isinstance(result, list):
+        if not result:
+            result = {}
+        else:
+            result = result[0]
     return {
         "category": result.get("category", "NONE"),
         "user_id": result.get("user_id"),
