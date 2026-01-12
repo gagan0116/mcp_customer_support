@@ -3,12 +3,13 @@ import sys
 import os
 import json
 from contextlib import AsyncExitStack
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from dotenv import load_dotenv
 from google import genai
+from google.genai import types
 
 # Load environment variables
 load_dotenv()
@@ -27,18 +28,23 @@ if not api_key:
     sys.exit(1)
 
 # Initialize global Gemini client
-# Note: Newer SDK uses a client instance instead of module-level configure
 gemini_client = genai.Client(api_key=api_key)
 
 class RefundsClient:
     def __init__(self):
         self.exit_stack = AsyncExitStack()
         self.sessions: Dict[str, ClientSession] = {}
+        # Configuration for all MCP servers we want to use
         self.server_configs = {
             "doc_server": {
                 "command": sys.executable,
                 "args": [os.path.join(PROJECT_ROOT, "doc_server", "mcp_doc_server.py")],
                 "env": None
+            },
+            "db_verification": {
+                "command": sys.executable,
+                "args": ["-m", "db_verification.db_verification_server"],
+                "env": {"PYTHONPATH": PROJECT_ROOT}
             }
         }
 
@@ -119,7 +125,6 @@ class RefundsClient:
         """
 
         try:
-            # Updated call for google.genai package
             response = gemini_client.models.generate_content(
                 model='gemini-2.0-flash', 
                 contents=prompt,
@@ -129,14 +134,134 @@ class RefundsClient:
         except Exception as e:
             return f"{{\"error\": \"LLM Extraction failed: {str(e)}\"}}"
 
+    async def verify_request_with_db(self, extracted_data: Dict[str, Any]):
+        """
+        Agentic verification flow loops using Gemini to interpret tool outputs and decide next steps.
+        """
+        db_session = self.sessions.get("db_verification")
+        if not db_session:
+            print("❌ Error: db_verification session not available.")
+            return
+
+        print("\n" + "="*40)
+        print("DATABASE VERIFICATION (AGENT LOOP)")
+        print("="*40)
+
+        # 1. Fetch available tools dynamically
+        tools_response = await db_session.list_tools()
+        tools_map = {t.name: t for t in tools_response.tools}
+        # Prepare tool definitions for Gemini
+        # We need to reshape them slightly to match what Gemini's API might expect if we were using function calling,
+        # but here we are doing "ReAct" style: Prompt -> Text Decision -> Code Execution -> Prompt.
+        tools_desc = []
+        for t in tools_response.tools:
+            tools_desc.append({
+                "name": t.name,
+                "description": t.description,
+                "parameters": t.inputSchema
+            })
+
+        # Initial Context
+        messages = [
+            """
+            You are an expert DB Verification Agent. Your goal is to verify a customer refund request.
+            
+            STRICT VERIFICATION PROCESS (Follow in order):
+            
+            STEP 1: IDENTITY CHECK
+            - Call 'verify_from_email_matches_customer' with the customer_email.
+            - IF 'matched' is False: STOP. Do not proceed to find orders. Output "Validation Failed: Email does not match."
+            - IF 'matched' is True: Proceed to Step 2.
+            
+            STEP 2: FIND ORDER (Hierarchical Search)
+            - ATTEMPT 1: If 'order_invoice_id' exists in data, call 'find_order_by_order_invoice_id'.
+              - If found, you are DONE. Return the order details.
+            - ATTEMPT 2: If finding by ID failed or ID was missing, check if 'invoice_number' exists in data.
+              - If yes, call 'find_order_by_invoice_number'.
+              - If found, you are DONE.
+            - ATTEMPT 3: If specific searches fail, call 'get_customer_orders_with_items' to get a list of recent orders.
+              - Then immediately call 'select_order_id' passing that usage data to pick the best one.
+              - If a 'selected_order_id' is returned, specific logic to confirm it? No, just accept the selection.
+            - ATTEMPT 4: If all else fails, call 'llm_find_orders' to search via SQL.
+            
+            STEP 3: REPORT
+            - If an order is found in any step, output "Verification Successful" and ensure you copy the full order JSON into 'verified_data'.
+            - If completely stuck after all attempts, output "Sending for Human Review".
+            
+            INSTRUCTIONS:
+            - Decide the NEXT SINGLE Action.
+            - Output JSON ONLY: { "tool_name": "...", "arguments": { ... } }
+            - If you are done or need to stop, output JSON: { "action": "terminate", "reason": "...", "verified_data": object|null }
+              (If verification was successful, you MUST include the full retrieved order details in the 'verified_data' field).
+            """
+        ]
+
+
+        # Context Data
+        context_str = f"EXTRACTED DATA:\n{json.dumps(extracted_data, indent=2)}\n\nAVAILABLE TOOLS:\n{json.dumps(tools_desc)}"
+        messages.append(context_str)
+
+        # Agent Loop
+        max_turns = 8
+        for i in range(max_turns):
+            print(f"\n--- Turn {i+1} ---")
+            
+            prompt_content = "\n".join(messages) + "\n\nWhat is the next step? Output valid JSON only."
+            
+            try:
+                # Ask LLM
+                response = gemini_client.models.generate_content(
+                    model='gemini-2.0-flash', 
+                    contents=prompt_content,
+                    config={"response_mime_type": "application/json"}
+                )
+                
+                decision_text = response.text
+                print(f"🤖 Agent thought: {decision_text}")
+                
+                decision = json.loads(decision_text)
+                
+                # Check termination
+                if "action" in decision and decision["action"] == "terminate":
+                    print(f"🏁 Agent Finished: {decision.get('reason')}")
+                    return decision.get("verified_data")
+                
+                tool_name = decision.get("tool_name")
+                args = decision.get("arguments", {})
+                
+                if not tool_name:
+                    print(f"⚠️ Invalid decision format. Stopping.")
+                    break
+
+                # Validations before calling
+                if tool_name not in tools_map:
+                    print(f"❌ Error: Tool {tool_name} not found.")
+                    messages.append(f"System: Tool {tool_name} does not exist. Choose from available tools.")
+                    continue
+
+                # Execute Tool
+                print(f"▶️ Executing: {tool_name}...")
+                result = await db_session.call_tool(tool_name, arguments=args)
+                tool_output_str = result.content[0].text
+                
+                # Print snippet for user
+                display_output = tool_output_str[:500] + "..." if len(tool_output_str) > 500 else tool_output_str
+                print(f"📄 Output: {display_output}")
+                
+                # Feed result back to context
+                messages.append(f"Tool '{tool_name}' Result:\n{tool_output_str}")
+                
+            except Exception as e:
+                print(f"❌ Error in Agent Loop: {e}")
+                break
+
     async def process_refund_request(self, json_file_path):
         """
         Main workflow:
-        1. Reads JSON email data
-        2. Filters Categories
-        3. Parses All PDF Attachments (using doc_server session)
-        4. Combines text
-        5. Calls LLM for extraction
+        1. Reads JSON
+        2. Parses PDFs
+        3. LLM Extraction
+        4. Agentic Verification
         """
         doc_session = self.sessions.get("doc_server")
         if not doc_session:
@@ -153,9 +278,7 @@ class RefundsClient:
         category = data.get("category", "NONE")
         print(f"\nProcessing Request Category: {category}")
 
-        # Check for Eligible Categories
-        eligible_categories = ["RETURN", "REPLACEMENT", "REFUND"]
-        if category not in eligible_categories:
+        if category not in ["RETURN", "REPLACEMENT", "REFUND"]:
             print("Skipping: Request does not belong to eligible category.")
             return
 
@@ -164,6 +287,7 @@ class RefundsClient:
         --- EMAIL METADATA ---
         Sender: {data.get('user_id', 'Unknown')}
         Received At: {data.get('received_at', 'Unknown')}
+        confidence_score: {data.get('confidence', 'N/A')}
         Category: {category}
         
         --- EMAIL BODY ---
@@ -181,7 +305,6 @@ class RefundsClient:
                 if filename.lower().endswith(".pdf"):
                     print(f"  - Parsing PDF: {filename}")
                     
-                    # Extract Base64 Data
                     file_data = attachment.get("data", {})
                     base64_content = ""
                     if isinstance(file_data, dict):
@@ -193,42 +316,51 @@ class RefundsClient:
                         continue
 
                     try:
-                        # 1. Save PDF
                         save_result = await doc_session.call_tool(
                             "save_base64_pdf",
-                            arguments={
-                                "base64_content": base64_content,
-                                "filename": filename
-                            }
+                            arguments={"base64_content": base64_content, "filename": filename}
                         )
                         saved_pdf_path = save_result.content[0].text
                         
-                        # 2. Parse PDF
                         parse_result = await doc_session.call_tool(
                             "parse_invoice",
                             arguments={"pdf_path": saved_pdf_path}
                         )
-                        
-                        extracted_text = parse_result.content[0].text
-                        combined_text += f"\n\n--- INVOICE ATTACHMENT: {filename} ---\n{extracted_text}"
+                        combined_text += f"\n\n--- INVOICE ATTACHMENT: {filename} ---\n{parse_result.content[0].text}"
                         
                     except Exception as e:
                         print(f"    Error processing attachment {filename}: {e}")
 
-        # --- Final LLM Extraction ---
+        # --- Extracion ---
         print("\nSending combined context to LLM for extraction...")
-        extraction_result = await self.extract_order_details(combined_text)
+        extraction_json_str = await self.extract_order_details(combined_text)
         
+        try:
+            extracted_data = json.loads(extraction_json_str)
+        except json.JSONDecodeError:
+            print("Error decoding extraction result.")
+            extracted_data = {}
+
         print("\n" + "="*40)
-        print("EXTRACTED ORDER DETAILS (JSON)")
+        print("EXTRACTED ORDER DETAILS")
         print("="*40)
-        print(extraction_result)
+        print(json.dumps(extracted_data, indent=2))
         
-        # Save result to file
         output_path = os.path.join(os.path.dirname(__file__), "extracted_order.json")
         with open(output_path, "w", encoding='utf-8') as f:
-            f.write(extraction_result)
+            f.write(json.dumps(extracted_data, indent=2))
         print(f"\nSaved extraction to {output_path}")
+
+        # --- DB Verification (Agentic) ---
+        verified_record = await self.verify_request_with_db(extracted_data)
+
+        if verified_record:
+            verified_path = os.path.join(os.path.dirname(__file__), "verified_order.json")
+            with open(verified_path, "w", encoding='utf-8') as f:
+                json.dump(verified_record, f, indent=2)
+            print(f"\n✅ Verified Order Details saved to {verified_path}")
+        else:
+            print("\nℹ️ No verified order data was returned to save.")
 
     async def cleanup(self):
         await self.exit_stack.aclose()
@@ -238,11 +370,9 @@ async def main():
     # 1. DOWNLOAD LATEST JSON FROM GCS
     bucket_name = os.getenv("GCS_BUCKET_NAME")
     blob_name = os.getenv("GCS_BLOB_NAME")
-    # Prefer env variable for destination, fallback to hardcoded path
     dest_path = os.getenv("GCS_DESTINATION_PATH")
     
     if not dest_path:
-        # Fallback to local default if env var is missing
         dest_path = os.path.join(PROJECT_ROOT, "artifacts", "latest_email.json")
 
     print("\n--- Step 1: Downloading from GCS ---")

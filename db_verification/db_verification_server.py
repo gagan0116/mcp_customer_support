@@ -65,6 +65,72 @@ _CUSTOMER_SELECT_COLUMNS = """
     c.created_at        AS created_at
 """
 
+def fetch_full_order_details(conn, field_name: str, value: str) -> Dict[str, Any] | None:
+    """Helper to fetch full order hierarchy by a specific field (invoice_number or order_invoice_id)."""
+    
+    # 1. Fetch Order + Customer
+    sql_main = f"""
+        SELECT
+            {_ORDER_SELECT_COLUMNS},
+            {_CUSTOMER_SELECT_COLUMNS}
+        FROM orders o
+        JOIN customers c ON o.customer_id = c.customer_id
+        WHERE o.{field_name} = %s
+        LIMIT 1;
+    """
+    
+    cur = conn.cursor()
+    try:
+        cur.execute(sql_main, (value,))
+        rows = rows_as_dicts(cur)
+    finally:
+        cur.close()
+        
+    if not rows:
+        return None
+        
+    main_data = rows[0]
+    order_id = main_data["order_id"]
+    
+    # 2. Fetch Items
+    sql_items = f"""
+        SELECT {_ORDER_ITEM_SELECT_COLUMNS}
+        FROM order_items oi
+        WHERE oi.order_id = %s
+        ORDER BY oi.item_name ASC;
+    """
+    
+    cur = conn.cursor()
+    try:
+        cur.execute(sql_items, (order_id,))
+        items = rows_as_dicts(cur)
+    finally:
+        cur.close()
+
+    # 3. Structure Output
+    # We strip redundant specific prefixes if desired, but returning flat + nested is cleaner
+    
+    # Separate customer keys
+    customer_info = {
+        "customer_id": main_data["customer_id"],
+        "customer_email": main_data["customer_email"],
+        "full_name": main_data["full_name"],
+        "phone": main_data["phone"],
+        "created_at": main_data["created_at"]
+    }
+    
+    # Separate order keys (everything else)
+    order_info = {k: v for k, v in main_data.items() if k not in customer_info}
+
+    return {
+        "order_invoice_id": order_info.get("order_invoice_id"),
+        "invoice_number": order_info.get("invoice_number"),
+        "customer": customer_info,
+        "order_details": order_info,
+        "items": items
+    }
+
+
 
 @mcp.tool()
 def list_orders_by_customer_email(customer_email: str, limit: int = 20) -> Dict[str, Any]:
@@ -103,67 +169,47 @@ def list_orders_by_customer_email(customer_email: str, limit: int = 20) -> Dict[
 
 @mcp.tool()
 def find_order_by_invoice_number(invoice_number: str) -> Dict[str, Any]:
-    """Find a single order by invoice number (exact match)."""
+    """
+    Find a single order by invoice number (exact match).
+    Returns full hierarchy: Customer, Order Details, and Order Items.
+    """
     if not invoice_number or not invoice_number.strip():
-        return {"invoice_number": invoice_number, "found": False, "order": None, "error": "invoice_number is required"}
+        return {"invoice_number": invoice_number, "found": False, "data": None, "error": "invoice_number is required"}
 
     inv = invoice_number.strip()
 
-    sql = f"""
-        SELECT
-            {_ORDER_SELECT_COLUMNS}
-        FROM orders o
-        WHERE o.invoice_number = %s
-        LIMIT 1;
-    """
-
     try:
         with db_connection() as conn:
-            cur = conn.cursor()
-            try:
-                cur.execute(sql, (inv,))
-                rows = rows_as_dicts(cur)
-            finally:
-                cur.close()
-        order = rows[0] if rows else None
-        return {"invoice_number": inv, "found": order is not None, "order": order}
+            data = fetch_full_order_details(conn, "invoice_number", inv)
+            
+        return {"invoice_number": inv, "found": data is not None, "data": data}
     except Exception as e:
-        return {"invoice_number": inv, "found": False, "order": None, "error": f"{type(e).__name__}: {e}"}
+        return {"invoice_number": inv, "found": False, "data": None, "error": f"{type(e).__name__}: {e}"}
 
 
 @mcp.tool()
 def find_order_by_order_invoice_id(order_invoice_id: str) -> Dict[str, Any]:
-    """Find a single order by order_invoice_id (exact match)."""
+    """
+    Find a single order by order_invoice_id (exact match).
+    Returns full hierarchy: Customer, Order Details, and Order Items.
+    """
     if not order_invoice_id or not order_invoice_id.strip():
         return {
             "order_invoice_id": order_invoice_id,
             "found": False,
-            "order": None,
+            "data": None,
             "error": "order_invoice_id is required",
         }
 
     oid = order_invoice_id.strip()
 
-    sql = f"""
-        SELECT
-            {_ORDER_SELECT_COLUMNS}
-        FROM orders o
-        WHERE o.order_invoice_id = %s
-        LIMIT 1;
-    """
-
     try:
         with db_connection() as conn:
-            cur = conn.cursor()
-            try:
-                cur.execute(sql, (oid,))
-                rows = rows_as_dicts(cur)
-            finally:
-                cur.close()
-        order = rows[0] if rows else None
-        return {"order_invoice_id": oid, "found": order is not None, "order": order}
+            data = fetch_full_order_details(conn, "order_invoice_id", oid)
+            
+        return {"order_invoice_id": oid, "found": data is not None, "data": data}
     except Exception as e:
-        return {"order_invoice_id": oid, "found": False, "order": None, "error": f"{type(e).__name__}: {e}"}
+        return {"order_invoice_id": oid, "found": False, "data": None, "error": f"{type(e).__name__}: {e}"}
 
 
 @mcp.tool()

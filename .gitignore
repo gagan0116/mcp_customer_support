@@ -19,7 +19,7 @@ Sample_Database_Creation/invoice.sql
 .vscode/
 
 # Project Artifacts (Generated parsed text files)
-# artifacts/*
+artifacts/
 
 db_tester.py
 llm_query_tester.py
