@@ -101,7 +101,7 @@ def extract_user_id(text: str) -> Optional[str]:
 # -------------------------------------------------
 # MAIN PROCESSOR
 # -------------------------------------------------
-def process_new_emails():
+def process_new_emails(notification_history_id: str):
     print("📥 Processing new emails")
 
     token = load_gmail_token()
@@ -118,7 +118,10 @@ def process_new_emails():
     service = build("gmail", "v1", credentials=creds)
 
     last_history_id = load_history_id()
-
+    last_history_id=  min(
+        int(last_history_id),
+        int(notification_history_id)
+    )
     # ---- FIRST RUN ----
     if not last_history_id:
         profile = service.users().getProfile(userId="me").execute()
