@@ -1,4 +1,5 @@
 import os
+import base64
 from mcp.server.fastmcp import FastMCP
 from pypdf import PdfReader
 
@@ -10,6 +11,37 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # Go up one level to project root, then into artifacts
 PROJECT_ROOT = os.path.dirname(BASE_DIR)
 ARTIFACTS_DIR = os.path.join(PROJECT_ROOT, "artifacts")
+
+@mcp.tool()
+def save_base64_pdf(base64_content: str, filename: str) -> str:
+    """
+    Decodes a base64 string and saves it as a PDF file in the artifacts directory.
+
+    Args:
+        base64_content: The base64 encoded string of the PDF file.
+        filename: The desired name for the saved PDF file (e.g., "invoice_123.pdf").
+
+    Returns:
+        The absolute path to the saved PDF file.
+    """
+    try:
+        # Create artifacts directory if it doesn't exist
+        os.makedirs(ARTIFACTS_DIR, exist_ok=True)
+
+        # Sanitize base64 string (remove data prefix if present)
+        if "," in base64_content:
+            base64_content = base64_content.split(",")[1]
+
+        pdf_bytes = base64.b64decode(base64_content)
+        output_path = os.path.join(ARTIFACTS_DIR, filename)
+
+        with open(output_path, "wb") as f:
+            f.write(pdf_bytes)
+
+        return output_path
+
+    except Exception as e:
+        return f"Error saving PDF: {str(e)}"
 
 @mcp.tool()
 def parse_invoice(pdf_path: str) -> str:
