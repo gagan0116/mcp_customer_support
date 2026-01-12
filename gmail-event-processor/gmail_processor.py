@@ -1,6 +1,7 @@
 import base64
 import re
 from typing import Dict, List, Tuple, Optional
+from email.utils import parseaddr
 
 from bs4 import BeautifulSoup
 from googleapiclient.discovery import build
@@ -81,21 +82,15 @@ def extract_parts(
 
 
 # -------------------------------------------------
-# USER ID EXTRACTION (EXPLICIT ONLY)
+# FROM EMAIL EXTRACTION (USER ID)
 # -------------------------------------------------
-def extract_user_id(text: str) -> Optional[str]:
-    patterns = [
-        r"user[_\s-]?id[:\s]+([a-zA-Z0-9\-]+)",
-        r"customer[_\s-]?id[:\s]+([a-zA-Z0-9\-]+)",
-        r"account[_\s-]?id[:\s]+([a-zA-Z0-9\-]+)",
-    ]
+def extract_sender_email(headers: Dict[str, str]) -> Optional[str]:
+    from_header = headers.get("from")
+    if not from_header:
+        return None
 
-    for p in patterns:
-        match = re.search(p, text, re.IGNORECASE)
-        if match:
-            return match.group(1)
-
-    return None
+    _, email_addr = parseaddr(from_header)
+    return email_addr.lower() if email_addr else None
 
 
 # -------------------------------------------------
@@ -158,7 +153,8 @@ def process_new_emails():
                 email["payload"], service, msg_id
             )
 
-            user_id = extract_user_id(body)
+            # ✅ userId = sender email address
+            user_id = extract_sender_email(headers)
 
             classification = classify_email(subject, body)
 
