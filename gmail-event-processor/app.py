@@ -41,8 +41,8 @@ from gmail_processor import process_new_emails
 
 app = Flask(__name__)
 
-PROJECT_ID = "YOUR_PROJECT_ID"
-TOPIC_NAME = "YOUR_TOPIC_NAME"
+PROJECT_ID = "vara-483300"
+TOPIC_NAME = "gmail-nbox-topic"
 
 
 # -------------------------------------------------
