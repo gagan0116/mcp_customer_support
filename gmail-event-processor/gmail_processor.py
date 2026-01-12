@@ -2,6 +2,7 @@ import base64
 import re
 from typing import Dict, List, Tuple, Optional
 from email.utils import parseaddr
+from datetime import datetime, timezone
 
 from bs4 import BeautifulSoup
 from googleapiclient.discovery import build
@@ -19,6 +20,15 @@ SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 # -------------------------------------------------
 def html_to_text(html: str) -> str:
     return BeautifulSoup(html, "html.parser").get_text(separator=" ", strip=True)
+
+
+# -------------------------------------------------
+# EPOCH → ISO TIME
+# -------------------------------------------------
+def epoch_millis_to_iso(ms: str) -> str:
+    return datetime.fromtimestamp(
+        int(ms) / 1000, tz=timezone.utc
+    ).isoformat()
 
 
 # -------------------------------------------------
@@ -153,8 +163,11 @@ def process_new_emails():
                 email["payload"], service, msg_id
             )
 
-            # ✅ userId = sender email address
+            # ✅ Sender email
             user_id = extract_sender_email(headers)
+
+            # ✅ Exact received time (server-side, reliable)
+            received_at = epoch_millis_to_iso(email["internalDate"])
 
             classification = classify_email(subject, body)
 
@@ -169,8 +182,9 @@ def process_new_emails():
                     "category": classification["category"],
                     "confidence": classification["confidence"],
                     "user_id": user_id,
+                    "received_at": received_at,
                     "email_body": body,
-                    "attachments": attachments,  # RAW BYTES INCLUDED
+                    "attachments": attachments,
                 }
             )
 

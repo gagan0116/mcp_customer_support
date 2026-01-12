@@ -19,7 +19,10 @@ async def pubsub_handler(request: Request):
             base64.b64decode(data).decode("utf-8")
         from gmail_processor import process_new_emails
         results=process_new_emails()
-        print(results)
+        from store_email import store_email_result
+        for i in results:
+            print(i)
+            store_email_result(i)
         print("done processing email")
         return {"status": "ok"}
     except Exception as e:
