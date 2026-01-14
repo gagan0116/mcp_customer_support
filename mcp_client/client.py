@@ -170,7 +170,7 @@ class RefundsClient:
             
             STEP 1: IDENTITY CHECK
             - Call 'verify_from_email_matches_customer' with the customer_email.
-            - IF 'matched' is False: STOP. Do not proceed to find orders. Output "Validation Failed: Email does not match."
+            - IF 'matched' is False: Call llm _find_orders. Output "Request sent for Human Review" and terminate.
             - IF 'matched' is True: Proceed to Step 2.
             
             STEP 2: FIND ORDER (Hierarchical Search)
