@@ -272,6 +272,9 @@ class RefundsClient:
             print(f"Error: File {json_file_path} not found.")
             return
 
+        # Determine artifacts directory from json file path
+        artifacts_dir = os.path.dirname(json_file_path)
+
         with open(json_file_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
 
@@ -316,15 +319,13 @@ class RefundsClient:
                         continue
 
                     try:
-                        save_result = await doc_session.call_tool(
-                            "save_base64_pdf",
-                            arguments={"base64_content": base64_content, "filename": filename}
-                        )
-                        saved_pdf_path = save_result.content[0].text
+                        # Construct output text path
+                        txt_filename = f"{os.path.splitext(filename)[0]}.txt"
+                        txt_path = os.path.join(artifacts_dir, txt_filename)
                         
                         parse_result = await doc_session.call_tool(
-                            "parse_invoice",
-                            arguments={"pdf_path": saved_pdf_path}
+                            "process_invoice",
+                            arguments={"base64_content": base64_content, "output_txt_path": txt_path}
                         )
                         combined_text += f"\n\n--- INVOICE ATTACHMENT: {filename} ---\n{parse_result.content[0].text}"
                         
@@ -346,7 +347,7 @@ class RefundsClient:
         print("="*40)
         print(json.dumps(extracted_data, indent=2))
         
-        output_path = os.path.join(os.path.dirname(__file__), "extracted_order.json")
+        output_path = os.path.join(artifacts_dir, "extracted_order.json")
         with open(output_path, "w", encoding='utf-8') as f:
             f.write(json.dumps(extracted_data, indent=2))
         print(f"\nSaved extraction to {output_path}")
@@ -355,7 +356,7 @@ class RefundsClient:
         verified_record = await self.verify_request_with_db(extracted_data)
 
         if verified_record:
-            verified_path = os.path.join(os.path.dirname(__file__), "verified_order.json")
+            verified_path = os.path.join(artifacts_dir, "verified_order.json")
             with open(verified_path, "w", encoding='utf-8') as f:
                 json.dump(verified_record, f, indent=2)
             print(f"\n✅ Verified Order Details saved to {verified_path}")
@@ -370,12 +371,18 @@ async def main():
     # 1. DOWNLOAD LATEST JSON FROM GCS
     bucket_name = os.getenv("GCS_BUCKET_NAME")
     blob_name = os.getenv("GCS_BLOB_NAME")
-    dest_path = os.getenv("GCS_DESTINATION_PATH")
     
-    if not dest_path:
-        dest_path = os.path.join(PROJECT_ROOT, "artifacts", "latest_email.json")
+    base_filename = os.path.basename(blob_name)
+    folder_name = os.path.splitext(base_filename)[0]
+    
+    # Create the instance artifacts directory
+    instance_artifacts_dir = os.path.join(PROJECT_ROOT, "artifacts", folder_name)
+    os.makedirs(instance_artifacts_dir, exist_ok=True)
+    
+    dest_path = os.path.join(instance_artifacts_dir, base_filename)
 
     print("\n--- Step 1: Downloading from GCS ---")
+    print(f"Downloading {blob_name} to {dest_path}")
     download_blob(bucket_name, blob_name, dest_path)
     
     # 2. PROCESS THE REFUND REQUEST

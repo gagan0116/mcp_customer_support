@@ -107,10 +107,6 @@ def fetch_full_order_details(conn, field_name: str, value: str) -> Dict[str, Any
     finally:
         cur.close()
 
-    # 3. Structure Output
-    # We strip redundant specific prefixes if desired, but returning flat + nested is cleaner
-    
-    # Separate customer keys
     customer_info = {
         "customer_id": main_data["customer_id"],
         "customer_email": main_data["customer_email"],
