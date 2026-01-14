@@ -134,7 +134,24 @@ def fetch_full_order_details(conn, field_name: str, value: str) -> Dict[str, Any
 
 @mcp.tool()
 def list_orders_by_customer_email(customer_email: str, limit: int = 20) -> Dict[str, Any]:
-    """List orders for a given customer email (case-insensitive)."""
+    """
+    List historical orders for a specific customer email.
+
+    This tool searches the database for all orders associated with the provided email address.
+    It performs a case-insensitive search.
+
+    Args:
+        customer_email (str): The customer's email address to search for (e.g., "user@example.com").
+        limit (int, optional): The maximum number of orders to return. Defaults to 20. 
+                               Values are clamped between 1 and 100.
+
+    Returns:
+        Dict[str, Any]: A dictionary containing:
+            - customer_email: The email used for the search.
+            - count: The number of orders found.
+            - orders: A list of order dictionaries containing order summary details.
+            - error: An error message string if the operation failed.
+    """
     if not customer_email or not customer_email.strip():
         return {"customer_email": customer_email, "count": 0, "orders": [], "error": "customer_email is required"}
 
@@ -168,30 +185,80 @@ def list_orders_by_customer_email(customer_email: str, limit: int = 20) -> Dict[
 
 
 @mcp.tool()
-def find_order_by_invoice_number(invoice_number: str) -> Dict[str, Any]:
+def find_order_by_invoice_number(invoice_number: str, customer_email: str) -> Dict[str, Any]:
     """
-    Find a single order by invoice number (exact match).
-    Returns full hierarchy: Customer, Order Details, and Order Items.
+    Find a single order by its  invoice number and verify it belongs to the customer.
+
+    This tool performs an exact match lookup on the `invoice_number` field. 
+    Crucially, it verifies that the order found belongs to the provided `customer_email`.
+    If the emails do not match, it returns a verification failure to prevent unauthorized access.
+
+    Args:
+        invoice_number (str): The visible invoice number string (e.g., "15209").
+        customer_email (str): The email address of the customer making the request. 
+                              Used to enforce ownership verification.
+
+    Returns:
+        Dict[str, Any]: A dictionary containing:
+            - invoice_number: The invoice number searched.
+            - found: Boolean indicating if the order exists.
+            - verification_passed: Boolean indicating if the customer_email matches the order owner.
+            - data: The full order hierarchy (Customer, Order Details, Items) if found and verified.
+            - error: Error message if lookup failed or verification failed.
     """
     if not invoice_number or not invoice_number.strip():
         return {"invoice_number": invoice_number, "found": False, "data": None, "error": "invoice_number is required"}
+    
+    if not customer_email or not customer_email.strip():
+        return {"invoice_number": invoice_number, "found": False, "data": None, "error": "customer_email is required for verification"}
 
     inv = invoice_number.strip()
+    cust_email_input = customer_email.strip().lower()
 
     try:
         with db_connection() as conn:
             data = fetch_full_order_details(conn, "invoice_number", inv)
             
-        return {"invoice_number": inv, "found": data is not None, "data": data}
+        if not data:
+             return {"invoice_number": inv, "found": False, "verification_passed": False, "data": None, "error": "Order not found"}
+
+        # Verify ownership
+        order_email = data.get("customer", {}).get("customer_email", "").lower()
+        if order_email != cust_email_input:
+            return {
+                "invoice_number": inv, 
+                "found": True, 
+                "verification_passed": False, 
+                "data": None, 
+                "error": f"Verification failed: Invoice exists but belongs to a different customer. Requesting email: {customer_email}, Order email: {order_email}"
+            }
+            
+        return {"invoice_number": inv, "found": True, "verification_passed": True, "data": data}
     except Exception as e:
-        return {"invoice_number": inv, "found": False, "data": None, "error": f"{type(e).__name__}: {e}"}
+        return {"invoice_number": inv, "found": False, "verification_passed": False, "data": None, "error": f"{type(e).__name__}: {e}"}
+
 
 
 @mcp.tool()
-def find_order_by_order_invoice_id(order_invoice_id: str) -> Dict[str, Any]:
+def find_order_by_order_invoice_id(order_invoice_id: str, customer_email: str) -> Dict[str, Any]:
     """
-    Find a single order by order_invoice_id (exact match).
-    Returns full hierarchy: Customer, Order Details, and Order Items.
+    Find a single order by its internal order_invoice_id and verify it belongs to the customer.
+
+    This tool performs an exact match lookup on the `order_invoice_id` field.
+    It enforces ownership verification by comparing the order's owner against `customer_email`.
+
+    Args:
+        order_invoice_id (str): The internal order ID string 
+        customer_email (str): The email address of the customer making the request.
+                              Used to enforce ownership verification.
+
+    Returns:
+        Dict[str, Any]: A dictionary containing:
+            - order_invoice_id: The ID searched.
+            - found: Boolean indicating if the order exists.
+            - verification_passed: Boolean indicating if ownership check passed.
+            - data: The full order hierarchy (Customer, Order Details, Items) if found and verified.
+            - error: Error message if lookup or verification failed.
     """
     if not order_invoice_id or not order_invoice_id.strip():
         return {
@@ -200,29 +267,61 @@ def find_order_by_order_invoice_id(order_invoice_id: str) -> Dict[str, Any]:
             "data": None,
             "error": "order_invoice_id is required",
         }
+    
+    if not customer_email or not customer_email.strip():
+        return {
+            "order_invoice_id": order_invoice_id,
+            "found": False,
+            "data": None,
+            "error": "customer_email is required for verification",
+        }
 
     oid = order_invoice_id.strip()
+    cust_email_input = customer_email.strip().lower()
 
     try:
         with db_connection() as conn:
             data = fetch_full_order_details(conn, "order_invoice_id", oid)
+        
+        if not data:
+            return {"order_invoice_id": oid, "found": False, "verification_passed": False, "data": None, "error": "Order not found"}
+
+        # Verify ownership
+        order_email = data.get("customer", {}).get("customer_email", "").lower()
+        if order_email != cust_email_input:
+            return {
+                "order_invoice_id": oid,
+                "found": True,
+                "verification_passed": False,
+                "data": None,
+                "error": f"Verification failed: Order ID exists but belongs to a different customer. Requesting email: {customer_email}",
+            }
             
-        return {"order_invoice_id": oid, "found": data is not None, "data": data}
+        return {"order_invoice_id": oid, "found": True, "verification_passed": True, "data": data}
     except Exception as e:
-        return {"order_invoice_id": oid, "found": False, "data": None, "error": f"{type(e).__name__}: {e}"}
+        return {"order_invoice_id": oid, "found": False, "verification_passed": False, "data": None, "error": f"{type(e).__name__}: {e}"}
+
 
 
 @mcp.tool()
 def list_order_items_by_order_invoice_id(order_invoice_id: str, limit: int = 200) -> Dict[str, Any]:
     """
-    List order items for a given order_invoice_id (exact match).
+    List detailed line items for a specific order_invoice_id.
+
+    This tool fetches all products/items associated with an order. It is useful when you have the 
+    Order ID but need to see exactly what was purchased (SKUs, current quantities, etc.).
 
     Args:
-        order_invoice_id: The order invoice id to search for (orders.order_invoice_id).
-        limit: Safety cap on number of items returned (default 200, capped at 500).
+        order_invoice_id (str): The order invoice ID to search for (orders.order_invoice_id).
+        limit (int, optional): Safety cap on number of items returned. Default 200, max 500.
 
     Returns:
-        Dict with order_invoice_id, resolved order_id (if found), count, and order_items.
+        Dict[str, Any]: A dictionary containing:
+            - order_invoice_id: ID searched.
+            - order_id: The resolved internal UUID of the order.
+            - count: Number of items returned.
+            - order_items: List of item dictionaries (sku, item_name, quantity, metadata, etc).
+            - error: Error message if operation failed.
     """
     if not order_invoice_id or not order_invoice_id.strip():
         return {
@@ -292,13 +391,18 @@ def list_order_items_by_order_invoice_id(order_invoice_id: str, limit: int = 200
 @mcp.tool()
 def verify_from_email_matches_customer(from_email: str) -> Dict[str, Any]:
     """
-    Verify whether the given from_email exists in customers.customer_email (exact match, case-insensitive).
+    Check if a sender's email address exists in the customer database.
+
+    This is an initial verification step to see if the user contacting support is a known customer.
+    It performs a case-insensitive exact match.
 
     Args:
-        from_email: The sender email address from a refund/return email.
+        from_email (str): The sender email address from the incoming request/email.
 
     Returns:
-        Dict with matched flag and basic customer info if matched.
+        Dict[str, Any]:
+            - matched (bool): True if the email exists in the `customers` table.
+            - customer (dict|None): Basic customer profile (ID, name, phone) if matched.
     """
     if not from_email or not from_email.strip():
         return {"from_email": from_email, "matched": False, "customer": None, "error": "from_email is required"}
@@ -336,13 +440,24 @@ def get_customer_orders_with_items(
     include_item_metadata: bool = False,
 ) -> Dict[str, Any]:
     """
-    Fallback retrieval tool:
-    Given only a customer email, return customer + (orders -> items) so an LLM can pick the relevant order.
+    Retrieve a customer's order history including line items for each order.
 
-    Notes:
-    - No timeframe filtering.
-    - Soft caps to avoid huge payloads as the DB grows.
-    - By default, item metadata is excluded (can be large).
+    This is a "deep fetch" tool used when we can't identify a specific order ID. 
+    It returns a structured history that an LLM can analyze to find a matching purchase 
+    based on context (e.g., "I bought a blue shirt last week").
+
+    Args:
+        customer_email (str): The customer's email address.
+        max_orders (int, optional): Max number of recent orders to fetch (default 50).
+        max_items_per_order (int, optional): Max items to include per order (default 50).
+        include_item_metadata (bool, optional): Whether to include large metadata JSON blobs for items. 
+                                                Defaults to False to save bandwidth.
+
+    Returns:
+        Dict[str, Any]:
+            - found_customer (bool): Whether the customer exists.
+            - orders (List[Dict]): List of orders, where each order contains an 'items' list.
+            - orders_truncated (bool): True if more orders exist than max_orders.
     """
     if not customer_email or not customer_email.strip():
         return {
@@ -529,17 +644,24 @@ def select_order_id(
     model: str = "gemini-2.0-flash",
 ) -> Dict[str, Any]:
     """
-    Use LLM to pick the most relevant order_id given:
-      - customer_orders_payload (output of get_customer_orders_with_items)
-      - email_info (your extracted JSON from the email)
+    Use an LLM (Gemini) to heuristically select the best matching order from history.
 
-    Returns a JSON dict like:
-    {
-      "selected_order_id": str|None,
-      "confidence": float,
-      "reason": str,
-      "candidates": [{"order_id": str, "reason": str}]
-    }
+    This tool takes a raw list of customer orders (from `get_customer_orders_with_items`) 
+    and the extracted email intent, then uses AI to reason about which order implies the request.
+    It looks at item names, price amounts, dates, and other loose hints.
+
+    Args:
+        customer_orders_payload (Dict): The JSON output from `get_customer_orders_with_items`.
+        email_info (Dict): The structured info extracted from the user's email 
+                           (must not contain a reliable invoice ID, otherwise you wouldn't use this tool).
+        model (str, optional): The Gemini model to use for reasoning. Defaults to "gemini-2.0-flash".
+
+    Returns:
+        Dict[str, Any]:
+            - selected_order_id (str|None): The ID of the best match, or None if ambiguous.
+            - confidence (float): A score from 0.0 to 1.0.
+            - reason (str): Explanation of why this order was selected.
+            - candidates (List): Alternative potential matches if uncertainty exists.
     """
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
@@ -672,8 +794,18 @@ email_info:
 @mcp.tool()
 def llm_find_orders(email_info: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Use Gemini to generate a safe SELECT query (schema + email_info) and execute it.
-    Returns candidate rows for human review.
+    Generate and execute a custom SQL query based on natural language email info.
+
+    This is a "last resort" tool. If standard lookups fail, this tool uses an LLM to 
+    construct a safe SQL SELECT statement based on the database schema and the 
+    details found in the email (e.g., "products worth around $50").
+
+    Args:
+        email_info (Dict): Structured information containing potential search hints 
+                           (amounts, partial names, dates).
+
+    Returns:
+        Dict[str, Any]: The results of the executed SQL query, or an error if the query was unsafe/invalid.
     """
     from db_verification.llm_sql_runner import llm_generate_and_execute  # local import to avoid import-time issues
 
