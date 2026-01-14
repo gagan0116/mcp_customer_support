@@ -114,7 +114,7 @@ class RefundsClient:
                 }}
             ],
             "return_category": "string (RETURN / REPLACEMENT / REFUND)",
-            "return_reason": "string (Summary of why they want a return/refund)",
+            "return_reason": "string (Detailed summary of the reason for return/refund)",
             "confidence_score": "number (0.0 to 1.0 - how confident are you in this extraction)"
         }}
 
@@ -147,12 +147,8 @@ class RefundsClient:
         print("DATABASE VERIFICATION (AGENT LOOP)")
         print("="*40)
 
-        # 1. Fetch available tools dynamically
         tools_response = await db_session.list_tools()
         tools_map = {t.name: t for t in tools_response.tools}
-        # Prepare tool definitions for Gemini
-        # We need to reshape them slightly to match what Gemini's API might expect if we were using function calling,
-        # but here we are doing "ReAct" style: Prompt -> Text Decision -> Code Execution -> Prompt.
         tools_desc = []
         for t in tools_response.tools:
             tools_desc.append({
@@ -161,9 +157,8 @@ class RefundsClient:
                 "parameters": t.inputSchema
             })
 
-        # Initial Context
         messages = [
-            """
+    """
             You are an expert DB Verification Agent. Your goal is to verify a customer refund request.
             
             STRICT VERIFICATION PROCESS (Follow in order):
@@ -194,14 +189,10 @@ class RefundsClient:
             - If you are done or need to stop, output JSON: { "action": "terminate", "reason": "...", "verified_data": object|null }
               (If verification was successful, you MUST include the full retrieved order details in the 'verified_data' field).
             """
-        ]
-
-
-        # Context Data
+]
         context_str = f"EXTRACTED DATA:\n{json.dumps(extracted_data, indent=2)}\n\nAVAILABLE TOOLS:\n{json.dumps(tools_desc)}"
         messages.append(context_str)
 
-        # Agent Loop
         max_turns = 8
         for i in range(max_turns):
             print(f"\n--- Turn {i+1} ---")
@@ -209,7 +200,6 @@ class RefundsClient:
             prompt_content = "\n".join(messages) + "\n\nWhat is the next step? Output valid JSON only."
             
             try:
-                # Ask LLM
                 response = gemini_client.models.generate_content(
                     model='gemini-2.0-flash', 
                     contents=prompt_content,
@@ -220,8 +210,7 @@ class RefundsClient:
                 print(f"🤖 Agent thought: {decision_text}")
                 
                 decision = json.loads(decision_text)
-                
-                # Check termination
+
                 if "action" in decision and decision["action"] == "terminate":
                     print(f"🏁 Agent Finished: {decision.get('reason')}")
                     return decision.get("verified_data")
