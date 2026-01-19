@@ -6,3 +6,5 @@ google-auth-oauthlib
 llama-parse
 python-dotenv
 nest-asyncio
+neo4j>=5.0.0
+google-genai
