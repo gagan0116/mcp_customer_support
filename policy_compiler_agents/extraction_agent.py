@@ -1,14 +1,18 @@
 # policy_compiler_agents/extraction_agent.py
 """
-Extraction Agent - Generates Cypher MERGE statements from policy content.
+Extraction Agent - 3-Phase Pipeline for Policy Knowledge Graph Construction.
 
-This agent uses the schema from the Ontology Designer to extract
-specific policy rules and generate Cypher statements for graph construction.
+Phase 1: TripletExtractor - LLM-based entity/relationship extraction
+Phase 2: GraphLinker - Python-based validation and resolution
+Phase 3: CypherGenerator - Cypher statement generation
 """
 
+import os
+import asyncio
 import json
 import re
-from typing import Any, Dict, List
+from difflib import SequenceMatcher
+from typing import Any, Dict, List, Tuple, Optional
 
 from google import genai
 from google.genai import types
@@ -18,46 +22,81 @@ from .tools import (
     read_policy_markdown,
     save_artifact,
     load_artifact,
-    extract_section_citations,
+    CitationManager,
+    POLICY_DOCS_DIR,
 )
 
-EXTRACTION_SYSTEM_PROMPT = """You are a Legal Knowledge Extractor specializing in retail policies.
-Your task is to extract ALL policy rules from the document and generate Cypher MERGE statements.
+# =============================================================================
+# PHASE 1: TRIPLET EXTRACTOR (LLM)
+# =============================================================================
 
-CRITICAL RULES:
-1. Use MERGE (not CREATE) to prevent duplicate nodes
-2. EVERY node MUST have a source_citation property with the section number (e.g., "Section 3.1")
-3. Extract ALL numeric constraints: days, fees, percentages, dollar amounts
-4. For conditional rules (e.g., "60 days for Total members"), create separate rule nodes with appropriate relationships
-5. Capture the full hierarchy of categories
-6. Extract all exceptions and non-returnable conditions
+PAGE_EXTRACTION_PROMPT = """You are a Legal Knowledge Extractor. Extract entities and relationships from this policy page.
 
-CYPHER PATTERNS TO USE:
-- For nodes: MERGE (n:Label {unique_prop: "value", source_citation: "Section X.Y"})
-- For relationships: MATCH (a:LabelA {prop: "val"}), (b:LabelB {prop: "val"}) MERGE (a)-[:REL_TYPE]->(b)
-- For setting additional properties: SET n.prop = value
-
-OUTPUT FORMAT: Return a JSON object with:
+OUTPUT FORMAT - Return valid JSON:
 {
-  "cypher_statements": [
-    "MERGE statement 1",
-    "MERGE statement 2",
-    ...
+  "entities": [
+    {
+      "label": "ReturnRule",
+      "properties": {"name": "15 Day Return Period", "days_allowed": 15},
+      "text_excerpt": "15 days"
+    }
   ],
-  "extraction_summary": {
-    "total_rules_extracted": number,
-    "categories_found": ["list", "of", "categories"],
-    "relationship_types_used": ["list", "of", "relationships"]
-  }
+  "relationships": [
+    {
+      "from_label": "ProductCategory",
+      "from_name": "Laptops",
+      "type": "HAS_RETURN_RULE",
+      "to_label": "ReturnRule", 
+      "to_name": "15 Day Return Period"
+    }
+  ]
 }
 
-Only output valid JSON, no additional text."""
+CRITICAL RULES:
+1. CONSISTENCY IS KING: The 'from_name' and 'to_name' in relationships MUST EXACTLY MATCH the 'name' property of the corresponding Entity.
+   - BAD: Entity name="15 Day Rule", Relationship to_name="15 days"
+   - GOOD: Entity name="15 Day Rule", Relationship to_name="15 Day Rule"
+2. Extract ALL entities mentioned on this page.
+3. Include text_excerpt - the exact phrase from the document (for citation).
+4. Use schema node types provided.
+5. Only output valid JSON.
+6. EXHAUSTIVE EXTRACTION: Extract ALL relationships implied by the text. Missing a relationship is worse. When in doubt, extract it."""
 
 
-def build_extraction_prompt(policy_content: str, schema: Dict[str, Any]) -> str:
-    """Build the extraction prompt with schema context."""
+def split_by_page_markers(markdown: str) -> List[Dict[str, Any]]:
+    """Split markdown content by page markers."""
+    pages = []
+    current_page = None
+    current_lines = []
     
-    # Summarize the schema for the prompt
+    page_pattern = re.compile(r'<!--\s*PAGE:([^:]+):(\d+):(\d+):(\d+)\s*-->')
+    
+    for line in markdown.split("\n"):
+        match = page_pattern.match(line)
+        if match:
+            if current_page is not None:
+                current_page["content"] = "\n".join(current_lines)
+                pages.append(current_page)
+            
+            current_page = {
+                "filename": match.group(1),
+                "page_num": int(match.group(2)),
+                "start_line": int(match.group(3)),
+                "end_line": int(match.group(4)),
+            }
+            current_lines = []
+        else:
+            current_lines.append(line)
+    
+    if current_page is not None:
+        current_page["content"] = "\n".join(current_lines)
+        pages.append(current_page)
+    
+    return pages
+
+
+def build_page_prompt(page: Dict[str, Any], schema: Dict[str, Any]) -> str:
+    """Build extraction prompt for a single page."""
     node_summary = []
     for node in schema.get("nodes", []):
         props = ", ".join([p["name"] for p in node.get("properties", [])])
@@ -67,46 +106,335 @@ def build_extraction_prompt(policy_content: str, schema: Dict[str, Any]) -> str:
     for rel in schema.get("relationships", []):
         rel_summary.append(f"- ({rel['from_label']})-[:{rel['type']}]->({rel['to_label']})")
     
-    return f"""Extract ALL policy rules from this document and generate Cypher MERGE statements.
+    return f"""Extract entities and relationships from this policy page.
 
-SCHEMA TO USE:
-
-Node Types:
+SCHEMA (use these node types):
 {chr(10).join(node_summary)}
 
-Relationships:
+RELATIONSHIPS:
 {chr(10).join(rel_summary)}
 
-POLICY DOCUMENT:
-{policy_content}
+PAGE CONTENT (from {page['filename']} page {page['page_num']}):
+{page['content']}
 
-REQUIREMENTS:
-1. Start with the Policy node containing metadata (company_name, effective_date)
-2. Create all ProductCategory nodes with their hierarchy
-3. Extract every return rule with days/conditions
-4. Create MembershipTier nodes and their override relationships
-5. Extract all restocking fees with amounts/percentages
-6. Create Exception nodes for non-returnable items and conditions
-7. Include source_citation on EVERY node (use section numbers from headers)
+Extract ALL entities and relationships from this page. Do not skip any."""
 
-Generate comprehensive Cypher statements that fully represent this policy in the graph."""
 
+async def extract_from_page(
+    page: Dict[str, Any],
+    schema: Dict[str, Any],
+    client,
+    model: str = "gemini-3-flash-preview",
+    max_retries: int = 3
+) -> Dict[str, Any]:
+    """Extract entities from a single page with retry logic."""
+    prompt = build_page_prompt(page, schema)
+    
+    for attempt in range(max_retries):
+        try:
+            response = await client.aio.models.generate_content(
+                model=model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=PAGE_EXTRACTION_PROMPT,
+                    temperature=0.0,
+                    response_mime_type="application/json",
+                ),
+            )
+            
+            result = json.loads(response.text)
+            
+            # Add page info to each entity for citation
+            for entity in result.get("entities", []):
+                entity["_page"] = page["page_num"]
+                entity["_filename"] = page["filename"]
+            
+            return result
+            
+        except (json.JSONDecodeError, Exception) as e:
+            if attempt < max_retries - 1:
+                print(f"   [WARN] Page {page['page_num']} attempt {attempt + 1} failed: {str(e)[:50]}. Retrying...")
+                await asyncio.sleep(1 * (attempt + 1))
+            else:
+                print(f"   [ERROR] Page {page['page_num']} failed after {max_retries} attempts")
+                return {"entities": [], "relationships": []}
+    
+    return {"entities": [], "relationships": []}
+
+
+async def extract_all_pages(
+    policy_content: str,
+    schema: Dict[str, Any],
+    model: str = "gemini-3-flash-preview"
+) -> Tuple[List[Dict], List[Dict]]:
+    """
+    Phase 1: Extract triplets from all pages.
+    Returns: (all_entities, all_relationships)
+    """
+    client = get_gemini_client()
+    pages = split_by_page_markers(policy_content)
+    
+    if not pages:
+        pages = [{
+            "filename": "policy.pdf",
+            "page_num": 1,
+            "start_line": 1,
+            "end_line": len(policy_content.split("\n")),
+            "content": policy_content
+        }]
+    
+    print(f"   [EXTRACT] Processing {len(pages)} pages...")
+    
+    all_entities = []
+    all_relationships = []
+    
+    for page in pages:
+        result = await extract_from_page(page, schema, client, model)
+        all_entities.extend(result.get("entities", []))
+        all_relationships.extend(result.get("relationships", []))
+    
+    print(f"   [EXTRACT] Raw extraction: {len(all_entities)} entities, {len(all_relationships)} relationships")
+    
+    return all_entities, all_relationships
+
+
+# =============================================================================
+# PHASE 2: GRAPH LINKER (Python Validation)
+# =============================================================================
+
+class GraphLinker:
+    """
+    Validates and resolves entity/relationship consistency.
+    Fixes name mismatches and type coercion issues.
+    """
+    
+    def __init__(self, schema: Dict[str, Any]):
+        self.schema = schema
+        self.entity_registry: Dict[Tuple[str, str], Dict] = {}  # (label, name) -> entity
+        self.schema_types = self._build_schema_types()
+        self.warnings: List[str] = []
+    
+    def _build_schema_types(self) -> Dict[str, Dict[str, str]]:
+        """Build a map of label -> {property_name: type}."""
+        types_map = {}
+        for node in self.schema.get("nodes", []):
+            label = node["label"]
+            types_map[label] = {}
+            for prop in node.get("properties", []):
+                types_map[label][prop["name"]] = prop.get("type", "string")
+        return types_map
+    
+    def build_registry(self, entities: List[Dict]) -> None:
+        """Index all entities by (label, name) for lookup."""
+        for entity in entities:
+            label = entity.get("label", "")
+            name = entity.get("properties", {}).get("name", "")
+            if label and name:
+                key = (label.lower(), name.lower())
+                if key not in self.entity_registry:
+                    self.entity_registry[key] = entity
+    
+    def _fuzzy_match(self, target_label: str, target_name: str, threshold: float = 0.8) -> Optional[str]:
+        """Find the best matching entity name using fuzzy matching."""
+        best_match = None
+        best_score = 0.0
+        
+        for (label, name), entity in self.entity_registry.items():
+            if label != target_label.lower():
+                continue
+            
+            score = SequenceMatcher(None, name, target_name.lower()).ratio()
+            if score > best_score and score >= threshold:
+                best_score = score
+                best_match = entity.get("properties", {}).get("name", name)
+        
+        return best_match
+    
+    def validate_types(self, entities: List[Dict]) -> List[Dict]:
+        """Coerce property types to match schema definitions."""
+        for entity in entities:
+            label = entity.get("label", "")
+            props = entity.get("properties", {})
+            schema_props = self.schema_types.get(label, {})
+            
+            for prop_name, prop_value in list(props.items()):
+                expected_type = schema_props.get(prop_name)
+                
+                if expected_type == "integer" and isinstance(prop_value, str):
+                    # Try to extract integer from string like "15 days" -> 15
+                    match = re.search(r'\d+', prop_value)
+                    if match:
+                        props[prop_name] = int(match.group())
+                
+                elif expected_type == "float" and isinstance(prop_value, str):
+                    match = re.search(r'[\d.]+', prop_value)
+                    if match:
+                        try:
+                            props[prop_name] = float(match.group())
+                        except ValueError:
+                            pass
+                
+                elif expected_type == "boolean" and isinstance(prop_value, str):
+                    props[prop_name] = prop_value.lower() in ("true", "yes", "1")
+        
+        return entities
+    
+    def resolve_relationships(self, relationships: List[Dict]) -> List[Dict]:
+        """Fix name mismatches in relationships using fuzzy matching."""
+        resolved = []
+        
+        for rel in relationships:
+            from_label = rel.get("from_label", "")
+            from_name = rel.get("from_name", "")
+            to_label = rel.get("to_label", "")
+            to_name = rel.get("to_name", "")
+            
+            # Check if from_name exists
+            from_key = (from_label.lower(), from_name.lower())
+            if from_key not in self.entity_registry:
+                matched = self._fuzzy_match(from_label, from_name)
+                if matched:
+                    self.warnings.append(f"[LINKER] Resolved '{from_name}' -> '{matched}' for {rel['type']}")
+                    rel["from_name"] = matched
+                else:
+                    self.warnings.append(f"[LINKER] Orphan relationship: {from_label}:'{from_name}' not found")
+                    continue  # Skip orphaned relationship
+            
+            # Check if to_name exists
+            to_key = (to_label.lower(), to_name.lower())
+            if to_key not in self.entity_registry:
+                matched = self._fuzzy_match(to_label, to_name)
+                if matched:
+                    self.warnings.append(f"[LINKER] Resolved '{to_name}' -> '{matched}' for {rel['type']}")
+                    rel["to_name"] = matched
+                else:
+                    self.warnings.append(f"[LINKER] Orphan relationship: {to_label}:'{to_name}' not found")
+                    continue  # Skip orphaned relationship
+            
+            resolved.append(rel)
+        
+        return resolved
+    
+    def deduplicate_entities(self, entities: List[Dict]) -> List[Dict]:
+        """Remove duplicate entities by (label, name)."""
+        seen = set()
+        unique = []
+        
+        for entity in entities:
+            label = entity.get("label", "")
+            name = entity.get("properties", {}).get("name", "")
+            key = (label.lower(), name.lower())
+            
+            if key not in seen:
+                seen.add(key)
+                unique.append(entity)
+        
+        return unique
+    
+    def run(self, entities: List[Dict], relationships: List[Dict]) -> Tuple[List[Dict], List[Dict]]:
+        """Execute full linking pipeline."""
+        print(f"   [LINKER] Input: {len(entities)} entities, {len(relationships)} relationships")
+        
+        # Step 1: Deduplicate
+        entities = self.deduplicate_entities(entities)
+        print(f"   [LINKER] After dedup: {len(entities)} entities")
+        
+        # Step 2: Build registry
+        self.build_registry(entities)
+        
+        # Step 3: Validate types
+        entities = self.validate_types(entities)
+        
+        # Step 4: Resolve relationships
+        relationships = self.resolve_relationships(relationships)
+        print(f"   [LINKER] After resolution: {len(relationships)} valid relationships")
+        
+        # Log warnings
+        for warning in self.warnings[:10]:  # Limit to first 10
+            print(f"   {warning}")
+        if len(self.warnings) > 10:
+            print(f"   [LINKER] ... and {len(self.warnings) - 10} more warnings")
+        
+        return entities, relationships
+
+
+# =============================================================================
+# PHASE 3: CYPHER GENERATOR (Python)
+# =============================================================================
+
+def generate_cypher_statements(
+    entities: List[Dict],
+    relationships: List[Dict],
+    schema: Dict[str, Any]
+) -> List[str]:
+    """Generate Cypher MERGE statements from validated entities and relationships."""
+    statements = []
+    
+    # Case-insensitive label lookup
+    valid_labels = {node["label"].lower(): node["label"] for node in schema.get("nodes", [])}
+    
+    # Generate node statements
+    for entity in entities:
+        raw_label = entity.get("label", "")
+        label = valid_labels.get(raw_label.lower(), raw_label)
+        props = entity.get("properties", {})
+        citation = entity.get("source_citation", "")
+        
+        if not props.get("name"):
+            continue  # Skip entities without names (GraphLinker should have caught this)
+        
+        prop_parts = []
+        for key, value in props.items():
+            if key == "source_citation" and citation:
+                continue
+            
+            if isinstance(value, str):
+                safe_value = value.replace('"', '\\"')
+                prop_parts.append(f'{key}: "{safe_value}"')
+            elif isinstance(value, (int, float)):
+                prop_parts.append(f'{key}: {value}')
+            elif isinstance(value, bool):
+                prop_parts.append(f'{key}: {"true" if value else "false"}')
+        
+        if citation:
+            safe_citation = citation.replace('"', '\\"')
+            prop_parts.append(f'source_citation: "{safe_citation}"')
+        
+        prop_string = ", ".join(prop_parts)
+        stmt = f"MERGE (n:{label} {{{prop_string}}})"
+        statements.append(stmt)
+    
+    # Generate relationship statements
+    for rel in relationships:
+        from_label = valid_labels.get(rel.get("from_label", "").lower(), rel.get("from_label", ""))
+        from_name = rel.get("from_name", "")
+        rel_type = rel.get("type", "")
+        to_label = valid_labels.get(rel.get("to_label", "").lower(), rel.get("to_label", ""))
+        to_name = rel.get("to_name", "")
+        
+        if not all([from_label, from_name, rel_type, to_label, to_name]):
+            continue
+        
+        safe_from = from_name.replace('"', '\\"')
+        safe_to = to_name.replace('"', '\\"')
+        
+        stmt = f'MATCH (a:{from_label} {{name: "{safe_from}"}}), (b:{to_label} {{name: "{safe_to}"}}) MERGE (a)-[:{rel_type}]->(b)'
+        statements.append(stmt)
+    
+    return statements
+
+
+# =============================================================================
+# MAIN PIPELINE
+# =============================================================================
 
 async def extract_policy_rules(
     policy_content: str = None,
     schema: Dict[str, Any] = None,
-    model: str = "gemini-2.0-flash"
+    model: str = None
 ) -> Dict[str, Any]:
     """
-    Extract policy rules and generate Cypher statements.
-    
-    Args:
-        policy_content: Optional policy markdown
-        schema: Schema from Ontology Designer (required)
-        model: Gemini model to use
-        
-    Returns:
-        Dict with cypher_statements and extraction summary
+    Full extraction pipeline: Extract -> Link -> Generate.
     """
     if policy_content is None:
         policy_content = read_policy_markdown()
@@ -117,46 +445,38 @@ async def extract_policy_rules(
         except FileNotFoundError:
             raise ValueError("Schema not found. Run Ontology Designer first.")
     
-    client = get_gemini_client()
-    prompt = build_extraction_prompt(policy_content, schema)
+    if model is None:
+        model = os.getenv("EXTRACTION_MODEL", "gemini-3-flash-preview")
     
-    response = await client.aio.models.generate_content(
-        model=model,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            system_instruction=EXTRACTION_SYSTEM_PROMPT,
-            temperature=0.1,
-            response_mime_type="application/json",
-        ),
-    )
+    # Phase 1: Extract raw triplets
+    raw_entities, raw_relationships = await extract_all_pages(policy_content, schema, model)
     
-    # Parse response
-    try:
-        extraction = json.loads(response.text)
-    except json.JSONDecodeError:
-        # Try to extract JSON
-        json_match = re.search(r'\{.*\}', response.text, re.DOTALL)
-        if json_match:
-            extraction = json.loads(json_match.group())
-        else:
-            raise ValueError(f"Could not parse extraction: {response.text[:500]}")
+    # Phase 2: Link and validate
+    linker = GraphLinker(schema)
+    clean_entities, clean_relationships = linker.run(raw_entities, raw_relationships)
     
-    # Validate
-    if "cypher_statements" not in extraction:
-        raise ValueError("Extraction must contain 'cypher_statements' array")
+    # Add citations programmatically
+    cm = CitationManager()
+    clean_entities = cm.add_citations_to_entities(clean_entities)
     
-    # Post-process: ensure all statements are valid strings
-    valid_statements = []
-    for stmt in extraction["cypher_statements"]:
-        if isinstance(stmt, str) and stmt.strip():
-            # Basic Cypher validation
-            stmt = stmt.strip()
-            if stmt.upper().startswith(("MERGE", "MATCH", "CREATE", "SET")):
-                valid_statements.append(stmt)
+    # Phase 3: Generate Cypher
+    cypher_statements = generate_cypher_statements(clean_entities, clean_relationships, schema)
     
-    extraction["cypher_statements"] = valid_statements
+    extraction = {
+        "cypher_statements": cypher_statements,
+        "extraction_summary": {
+            "total_pages": len(split_by_page_markers(policy_content)) or 1,
+            "raw_entities": len(raw_entities),
+            "raw_relationships": len(raw_relationships),
+            "clean_entities": len(clean_entities),
+            "clean_relationships": len(clean_relationships),
+            "cypher_count": len(cypher_statements),
+            "linker_warnings": len(linker.warnings),
+        },
+        "entities": clean_entities,
+        "relationships": clean_relationships,
+    }
     
-    # Save artifact
     artifact_path = save_artifact("extracted_cypher", extraction)
     extraction["_artifact_path"] = artifact_path
     
@@ -164,31 +484,24 @@ async def extract_policy_rules(
 
 
 async def run_extraction_agent(schema: Dict[str, Any] = None) -> Dict[str, Any]:
-    """
-    Main entry point for the Extraction agent.
-    Uses schema to extract rules and generate Cypher.
-    """
-    print("📋 Extraction Agent: Extracting policy rules...")
+    """Main entry point for the Extraction agent."""
+    print("[EXTRACTION] Starting 3-phase extraction pipeline...")
     
     try:
         extraction = await extract_policy_rules(schema=schema)
         
-        stmt_count = len(extraction.get("cypher_statements", []))
         summary = extraction.get("extraction_summary", {})
         
-        print(f"✅ Extracted {stmt_count} Cypher statements")
-        print(f"📁 Saved to: {extraction.get('_artifact_path')}")
+        print(f"[EXTRACTION] Complete: {summary.get('cypher_count', 0)} Cypher statements")
+        print(f"[EXTRACTION] Saved to: {extraction.get('_artifact_path')}")
         
         return {
             "status": "success",
             "extraction": extraction,
-            "summary": {
-                "statement_count": stmt_count,
-                "extraction_summary": summary,
-            }
+            "summary": summary
         }
     except Exception as e:
-        print(f"❌ Extraction failed: {e}")
+        print(f"[EXTRACTION] Failed: {e}")
         return {
             "status": "error",
             "error": str(e)
@@ -196,6 +509,5 @@ async def run_extraction_agent(schema: Dict[str, Any] = None) -> Dict[str, Any]:
 
 
 if __name__ == "__main__":
-    import asyncio
     result = asyncio.run(run_extraction_agent())
     print(json.dumps(result, indent=2, default=str))
