@@ -51,7 +51,7 @@ class PolicyCompilerPipeline:
             Pipeline execution results
         """
         print("=" * 60)
-        print("🚀 POLICY COMPILER PIPELINE - Starting")
+        print("[PIPELINE] POLICY COMPILER PIPELINE - Starting")
         print("=" * 60)
         
         results = {
@@ -61,7 +61,7 @@ class PolicyCompilerPipeline:
         
         try:
             # Stage 1: Ontology Design
-            print("\n📍 Stage 1/4: Ontology Design")
+            print("\n[STAGE 1/4] Ontology Design")
             print("-" * 40)
             ontology_result = await run_ontology_agent()
             results["stages"]["ontology"] = ontology_result
@@ -72,7 +72,7 @@ class PolicyCompilerPipeline:
             self.state["schema"] = ontology_result["schema"]
             
             # Stage 2: Extraction
-            print("\n📍 Stage 2/4: Policy Extraction")
+            print("\n[STAGE 2/4] Policy Extraction")
             print("-" * 40)
             extraction_result = await run_extraction_agent(schema=self.state["schema"])
             results["stages"]["extraction"] = extraction_result
@@ -83,7 +83,7 @@ class PolicyCompilerPipeline:
             self.state["extraction"] = extraction_result["extraction"]
             
             # Stage 3: Critic Validation (with retry loop)
-            print("\n📍 Stage 3/4: Validation")
+            print("\n[STAGE 3/4] Validation")
             print("-" * 40)
             
             approved = False
@@ -96,11 +96,11 @@ class PolicyCompilerPipeline:
                 
                 if critic_result.get("approved", False):
                     approved = True
-                    print(f"   ✅ Approved on attempt {attempt + 1}")
+                    print(f"   [OK] Approved on attempt {attempt + 1}")
                     break
                 else:
                     if attempt < self.max_revision_attempts:
-                        print(f"   ⚠️ Revision needed, attempting re-extraction...")
+                        print(f"   [WARN] Revision needed, attempting re-extraction...")
                         # Re-run extraction with critic feedback
                         extraction_result = await run_extraction_agent(
                             schema=self.state["schema"]
@@ -109,12 +109,12 @@ class PolicyCompilerPipeline:
                             self.state["extraction"] = extraction_result["extraction"]
             
             if not approved:
-                print("   ⚠️ Proceeding despite validation issues (max attempts reached)")
+                print("   [WARN] Proceeding despite validation issues (max attempts reached)")
             
             self.state["validation"] = critic_result.get("validation", {})
             
             # Stage 4: Graph Building
-            print("\n📍 Stage 4/4: Graph Construction")
+            print("\n[STAGE 4/4] Graph Construction")
             print("-" * 40)
             builder_result = await run_builder_agent(
                 extraction=self.state["extraction"],
@@ -135,7 +135,7 @@ class PolicyCompilerPipeline:
             }
             
             print("\n" + "=" * 60)
-            print("✅ PIPELINE COMPLETE - Knowledge graph built successfully!")
+            print("[PIPELINE] COMPLETE - Knowledge graph built successfully!")
             print("=" * 60)
             print(f"   Schema: {results['final_state']['schema_nodes']} node types")
             print(f"   Cypher: {results['final_state']['cypher_statements']} statements")
@@ -153,7 +153,7 @@ class PolicyCompilerPipeline:
         """Mark pipeline as failed."""
         results["pipeline_status"] = "failed"
         results["error"] = error
-        print(f"\n❌ PIPELINE FAILED: {error}")
+        print(f"\n[PIPELINE] FAILED: {error}")
         save_artifact("pipeline_results", results)
         return results
 
@@ -173,42 +173,25 @@ async def run_pipeline(clear_existing: bool = True) -> Dict[str, Any]:
 
 
 # CLI interface
-if __name__ == "__main__":
+def main():
     import argparse
+    import os
     
     parser = argparse.ArgumentParser(description="Policy Compiler Pipeline")
-    parser.add_argument(
-        "--run-pipeline",
-        action="store_true",
-        help="Run the full compilation pipeline"
-    )
-    parser.add_argument(
-        "--keep-existing",
-        action="store_true",
-        help="Don't clear existing graph before building"
-    )
-    parser.add_argument(
-        "--stage",
-        choices=["ontology", "extraction", "critic", "builder"],
-        help="Run a specific stage only"
-    )
+    parser.add_argument("--run-pipeline", action="store_true", help="Run the full policy compilation pipeline")
     
     args = parser.parse_args()
     
-    async def main():
-        if args.run_pipeline or not args.stage:
-            result = await run_pipeline(clear_existing=not args.keep_existing)
-        elif args.stage == "ontology":
-            result = await run_ontology_agent()
-        elif args.stage == "extraction":
-            result = await run_extraction_agent()
-        elif args.stage == "critic":
-            result = await run_critic_agent()
-        elif args.stage == "builder":
-            result = await run_builder_agent(clear_existing=not args.keep_existing)
-        
-        print("\n" + "=" * 60)
-        print("FINAL RESULT:")
-        print(json.dumps(result, indent=2, default=str)[:2000])
-    
-    asyncio.run(main())
+    # Check .env first
+    if not os.path.exists(".env"):
+        print("[ERROR] .env file not found. Please create one with GEMINI_API_KEY and NEO4J credentials.")
+        return
+
+    if args.run_pipeline:
+        # Run async pipeline
+        asyncio.run(run_pipeline())
+    else:
+        parser.print_help()
+
+if __name__ == "__main__":
+    main()

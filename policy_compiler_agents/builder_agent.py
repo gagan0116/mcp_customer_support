@@ -24,16 +24,49 @@ from neo4j_graph_engine.db import (
 )
 
 
-async def create_schema_constraints() -> Dict[str, Any]:
-    """Create recommended indexes and constraints."""
-    constraints = [
-        "CREATE CONSTRAINT policy_name IF NOT EXISTS FOR (p:Policy) REQUIRE p.company_name IS UNIQUE",
-        "CREATE CONSTRAINT category_name IF NOT EXISTS FOR (c:ProductCategory) REQUIRE c.name IS UNIQUE",
-        "CREATE CONSTRAINT tier_name IF NOT EXISTS FOR (t:MembershipTier) REQUIRE t.tier_name IS UNIQUE",
-        "CREATE INDEX rule_days IF NOT EXISTS FOR (r:ReturnRule) ON (r.return_days)",
-        "CREATE INDEX source_citation IF NOT EXISTS FOR (n:ReturnRule) ON (n.source_citation)",
-    ]
+async def create_schema_constraints(schema: Dict[str, Any] = None) -> Dict[str, Any]:
+    """
+    Create indexes and constraints dynamically from schema.
     
+    Args:
+        schema: The proposed schema from Ontology Agent
+    """
+    from .tools import load_artifact
+    
+    # Load schema if not provided
+    if schema is None:
+        try:
+            schema = load_artifact("proposed_schema")
+        except FileNotFoundError:
+            # Fallback to basic constraints
+            schema = {"nodes": []}
+    
+    constraints = []
+    
+    # Generate constraints from schema nodes
+    for node in schema.get("nodes", []):
+        label = node.get("label", "")
+        if not label:
+            continue
+            
+        # Check for UNIQUE constraints in schema
+        for constraint in node.get("constraints", []):
+            if "UNIQUE" in constraint.upper():
+                # Extract property name from constraint like "UNIQUE(name)"
+                import re
+                match = re.search(r'UNIQUE\((\w+)\)', constraint, re.IGNORECASE)
+                if match:
+                    prop = match.group(1)
+                    constraints.append(
+                        f"CREATE CONSTRAINT {label.lower()}_{prop} IF NOT EXISTS FOR (n:{label}) REQUIRE n.{prop} IS UNIQUE"
+                    )
+        
+        # Always create index on source_citation for traceability
+        constraints.append(
+            f"CREATE INDEX {label.lower()}_citation IF NOT EXISTS FOR (n:{label}) ON (n.source_citation)"
+        )
+    
+    # Execute constraints
     results = []
     for constraint in constraints:
         try:
@@ -41,7 +74,7 @@ async def create_schema_constraints() -> Dict[str, Any]:
             results.append({"query": constraint[:60], "status": "success"})
         except Exception as e:
             error_msg = str(e)
-            if "already exists" in error_msg.lower():
+            if "already exists" in error_msg.lower() or "equivalent" in error_msg.lower():
                 results.append({"query": constraint[:60], "status": "already_exists"})
             else:
                 results.append({"query": constraint[:60], "status": "error", "error": error_msg[:100]})
@@ -249,7 +282,7 @@ async def run_builder_agent(
     Main entry point for the Graph Builder agent.
     Builds the knowledge graph from extraction artifact.
     """
-    print("🏗️ Graph Builder Agent: Building knowledge graph...")
+    print("[BUILDER] Building knowledge graph...")
     
     try:
         result = await build_graph(
@@ -261,21 +294,21 @@ async def run_builder_agent(
         verification = result.get("verification", {})
         
         if status == "success":
-            print(f"✅ Graph built successfully!")
+            print(f"[BUILDER] Graph built successfully!")
             print(f"   Nodes: {verification.get('total_nodes', 0)}")
             print(f"   With citations: {verification.get('nodes_with_citations', 0)}")
         elif status == "partial_success":
-            print(f"⚠️ Graph built with some errors")
+            print(f"[BUILDER] Graph built with some errors")
             print(f"   Nodes: {verification.get('total_nodes', 0)}")
         else:
-            print(f"❌ Graph build failed")
+            print(f"[BUILDER] Graph build failed")
         
-        print(f"📁 Log saved to: {result.get('_artifact_path')}")
+        print(f"[BUILDER] Log saved to: {result.get('_artifact_path')}")
         
         return {"status": "success", "build_result": result}
         
     except Exception as e:
-        print(f"❌ Build failed: {e}")
+        print(f"[BUILDER] Build failed: {e}")
         return {"status": "error", "error": str(e)}
     finally:
         await close_driver()
