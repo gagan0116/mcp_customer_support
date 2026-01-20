@@ -59,7 +59,7 @@ Be thorough but practical. Minor warnings should not block approval."""
 async def validate_artifacts(
     schema: Dict[str, Any] = None,
     extraction: Dict[str, Any] = None,
-    model: str = "gemini-2.0-flash"
+    model: str = "gemini-3-flash-preview"
 ) -> Dict[str, Any]:
     """
     Validate the schema and extraction artifacts.
@@ -176,6 +176,21 @@ def perform_local_validation(
                 "severity": "error",
             })
     
+    # Check linker warnings (orphaned relationships that couldn't be resolved)
+    linker_warnings = extraction.get("extraction_summary", {}).get("linker_warnings", 0)
+    if linker_warnings > 10:
+        issues.append({
+            "type": "extraction",
+            "issue": f"Too many orphaned relationships: {linker_warnings} relationships could not be connected",
+            "severity": "error",
+        })
+    elif linker_warnings > 0:
+        issues.append({
+            "type": "extraction",
+            "issue": f"{linker_warnings} relationships could not be connected (minor)",
+            "severity": "warning",
+        })
+    
     # Check Cypher syntax basics
     cypher_statements = extraction.get("cypher_statements", [])
     for i, stmt in enumerate(cypher_statements):
@@ -218,7 +233,7 @@ async def run_critic_agent(
     Main entry point for the Critic agent.
     Validates schema and extraction, returns approval status.
     """
-    print("🔍 Critic Agent: Validating schema and extraction...")
+    print("[CRITIC] Validating schema and extraction...")
     
     try:
         validation = await validate_artifacts(schema=schema, extraction=extraction)
@@ -227,16 +242,16 @@ async def run_critic_agent(
         confidence = validation.get("confidence_score", 0)
         
         if status == "approved":
-            print(f"✅ Validation APPROVED (confidence: {confidence:.1%})")
+            print(f"[CRITIC] Validation APPROVED (confidence: {confidence:.1%})")
         else:
-            print(f"⚠️ Validation needs revision (confidence: {confidence:.1%})")
+            print(f"[CRITIC] Validation needs revision (confidence: {confidence:.1%})")
             issues_count = (
                 len(validation.get("schema_issues", [])) +
                 len(validation.get("cypher_issues", []))
             )
             print(f"   Issues found: {issues_count}")
         
-        print(f"📁 Saved to: {validation.get('_artifact_path')}")
+        print(f"[CRITIC] Saved to: {validation.get('_artifact_path')}")
         
         return {
             "status": "success",
@@ -244,7 +259,7 @@ async def run_critic_agent(
             "approved": status == "approved",
         }
     except Exception as e:
-        print(f"❌ Validation failed: {e}")
+        print(f"[CRITIC] Validation failed: {e}")
         return {
             "status": "error",
             "error": str(e),
