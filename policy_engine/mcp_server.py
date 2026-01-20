@@ -37,7 +37,8 @@ async def parse_all_policy_documents(
 ) -> str:
     """
     Parses ALL PDF policy documents in a directory and combines them into a single Markdown file.
-    Each document section is prefixed with its source filename for traceability.
+    Each page is prefixed with a marker for traceability: <!-- PAGE:filename:page:start_line:end_line -->
+    Also generates a combined_policy_index.json for citation lookup.
     
     Args:
         pdf_directory: Path to folder containing PDFs. Defaults to policy_docs/policy_pdfs.
@@ -46,9 +47,12 @@ async def parse_all_policy_documents(
     Returns:
         Status message with parsing results.
     """
+    import json
+    
     # Use defaults if not provided
     pdf_dir = pdf_directory or DEFAULT_PDF_DIR
     output_path = output_file or DEFAULT_OUTPUT_FILE
+    index_path = output_path.replace(".md", "_index.json")
     
     api_key = os.getenv("LLAMA_CLOUD_API_KEY")
     if not api_key:
@@ -70,36 +74,74 @@ async def parse_all_policy_documents(
             verbose=True
         )
         
-        combined_content = []
-        combined_content.append(f"# Combined Policy Documents")
-        combined_content.append(f"**Generated**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        combined_content.append(f"**Source Directory**: {pdf_dir}")
-        combined_content.append(f"**Total Documents**: {len(pdf_files)}")
-        combined_content.append("\n---\n")
+        combined_lines = []
+        page_index = {"pages": [], "generated_at": datetime.now().isoformat()}
+        current_line = 1
+        
+        # Header
+        header_lines = [
+            "# Combined Policy Documents",
+            f"**Generated**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            f"**Source Directory**: {pdf_dir}",
+            f"**Total Documents**: {len(pdf_files)}",
+            "",
+            "---",
+            ""
+        ]
+        combined_lines.extend(header_lines)
+        current_line += len(header_lines)
         
         results = []
         for pdf_path in sorted(pdf_files):
             filename = os.path.basename(pdf_path)
-            combined_content.append(f"\n\n<!-- SOURCE: {filename} -->")
-            combined_content.append(f"## 📄 Source: {filename}")
-            combined_content.append("---\n")
             
+            # Parse the PDF - each document is a page
             documents = await parser.aload_data(pdf_path)
-            doc_text = "\n\n".join([doc.text for doc in documents])
-            combined_content.append(doc_text)
             
-            results.append(f"✅ {filename}: {len(doc_text)} chars")
+            for page_num, doc in enumerate(documents, start=1):
+                page_lines = doc.text.split("\n")
+                start_line = current_line
+                end_line = current_line + len(page_lines) - 1
+                
+                # Add page marker
+                page_marker = f"<!-- PAGE:{filename}:{page_num}:{start_line}:{end_line} -->"
+                combined_lines.append(page_marker)
+                current_line += 1
+                
+                # Add page content
+                combined_lines.extend(page_lines)
+                current_line += len(page_lines)
+                
+                # Add empty line between pages
+                combined_lines.append("")
+                current_line += 1
+                
+                # Record in index
+                page_index["pages"].append({
+                    "filename": filename,
+                    "page": page_num,
+                    "start_line": start_line,
+                    "end_line": end_line
+                })
+            
+            results.append(f"✅ {filename}: {len(documents)} pages")
         
-        # Write combined file
-        final_content = "\n".join(combined_content)
+        # Write combined markdown file
+        final_content = "\n".join(combined_lines)
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(final_content)
         
+        # Write index file
+        with open(index_path, "w", encoding="utf-8") as f:
+            json.dump(page_index, f, indent=2)
+        
         return (
             f"Successfully parsed {len(pdf_files)} documents.\n"
             f"Combined output: {output_path}\n"
-            f"Total size: {len(final_content)} characters\n\n"
+            f"Index file: {index_path}\n"
+            f"Total pages: {len(page_index['pages'])}\n"
+            f"Total lines: {current_line - 1}\n\n"
             f"Details:\n" + "\n".join(results)
         )
         
