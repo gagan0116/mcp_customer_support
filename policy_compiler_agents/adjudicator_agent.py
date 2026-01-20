@@ -30,21 +30,64 @@ from neo4j_graph_engine.db import execute_query as query_graph
 from .tools import get_gemini_client
 
 
+# Condition normalization map - maps enum values to semantic aliases
+CONDITION_ALIASES = {
+    "DAMAGED_DEFECTIVE": ["damaged", "defective", "broken", "damaged, defective or incorrect"],
+    "NEW_UNOPENED": ["new", "unopened", "sealed", "factory sealed"],
+    "OPENED_LIKE_NEW": ["opened", "like new", "used", "good condition"],
+    "OPENED_USED": ["used", "worn", "opened"],
+}
+
+
+def normalize_condition_static(condition: str) -> list:
+    """Returns all semantic aliases for a condition enum (static lookup)."""
+    if condition in CONDITION_ALIASES:
+        return CONDITION_ALIASES[condition]
+    return [condition.lower().replace("_", " ")]
+
 class Adjudicator:
-    def __init__(self, model: str = "gemini-2.0-flash"):
+    def __init__(self, model: str = "gemini-3-flash-preview"):
         self.model = model
         self.client = get_gemini_client()
         self.schema_cache = {
             "categories": [],
             "tiers": [],
+            "conditions": [],  # Added for condition normalization
             "relationship_types": []
         }
+
+    async def generate_with_retry(self, prompt: str, max_retries: int = 5) -> Any:
+        """
+        Helper to call Gemini with exponential backoff for 429 errors.
+        """
+        import time
+        base_delay = 2
+        
+        for attempt in range(max_retries):
+            try:
+                resp = await self.client.aio.models.generate_content(
+                    model=self.model,
+                    contents=prompt
+                )
+                return resp
+            except Exception as e:
+                error_str = str(e)
+                if "429" in error_str or "quota" in error_str.lower():
+                    if attempt == max_retries - 1:
+                        raise e
+                    
+                    delay = base_delay * (2 ** attempt)
+                    print(f"   [WARN] Quota exceeded (429). Retrying in {delay}s...")
+                    await asyncio.sleep(delay)
+                else:
+                    raise e
+        return None
 
     # =========================================================================
     # COMPONENT 1: Schema Cache
     # =========================================================================
     async def initialize(self):
-        """Pre-fetch valid categories, tiers, and schema from Neo4j."""
+        """Pre-fetch valid categories, tiers, conditions, and schema from Neo4j."""
         print("   [ADJUDICATOR] Caching schema values...")
         
         # Fetch Categories
@@ -55,11 +98,75 @@ class Adjudicator:
         tier_result = await query_graph("MATCH (m:MembershipTier) RETURN m.name as name")
         self.schema_cache["tiers"] = [r["name"] for r in tier_result if r.get("name")]
         
+        # Fetch Conditions (for condition normalization)
+        cond_result = await query_graph("MATCH (c:Condition) RETURN c.name as name")
+        self.schema_cache["conditions"] = [r["name"] for r in cond_result if r.get("name")]
+        
         # Fetch Relationship Types
         rel_result = await query_graph("CALL db.relationshipTypes() YIELD relationshipType RETURN relationshipType")
         self.schema_cache["relationship_types"] = [r["relationshipType"] for r in rel_result]
         
-        print(f"   [ADJUDICATOR] Cached {len(self.schema_cache['categories'])} categories, {len(self.schema_cache['tiers'])} tiers.")
+        print(f"   [ADJUDICATOR] Cached {len(self.schema_cache['categories'])} categories, {len(self.schema_cache['conditions'])} conditions.")
+
+    async def normalize_condition(self, item_condition: str) -> str:
+        """
+        Hybrid condition normalization:
+        1. Try static lookup first (fast, deterministic)
+        2. If no match, use LLM for semantic matching
+        """
+        graph_conditions = self.schema_cache.get("conditions", [])
+        
+        # Step 1: Static lookup
+        aliases = normalize_condition_static(item_condition)
+        for alias in aliases:
+            for gc in graph_conditions:
+                if alias.lower() in gc.lower() or gc.lower() in alias.lower():
+                    print(f"   [CONDITION] Static match: '{item_condition}' -> '{gc}'")
+                    return gc
+        
+        # Step 2: LLM fallback
+        if graph_conditions:
+            print(f"   [CONDITION] No static match for '{item_condition}', trying LLM...")
+            
+            prompt = f"""You are a Condition Matcher for a return policy system.
+
+TASK: Match the customer's item condition to the closest policy condition.
+
+Customer's Item Condition: "{item_condition}"
+Valid Policy Conditions: {graph_conditions}
+
+INSTRUCTIONS:
+- Find the condition from the list that is semantically closest to the customer's condition.
+- "DAMAGED_DEFECTIVE" means the same as "damaged", "defective", "broken".
+- "NEW_UNOPENED" means the same as "new", "sealed", "factory sealed".
+- If no good match, reply with "NO_MATCH".
+
+OUTPUT: Reply with ONLY the matching condition name from the list, nothing else."""
+
+            try:
+                resp = await self.generate_with_retry(prompt)
+                result = resp.text.strip().strip('"').strip("'")
+                
+                if result in graph_conditions:
+                    print(f"   [CONDITION] LLM match: '{item_condition}' -> '{result}'")
+                    return result
+                
+                if result == "NO_MATCH":
+                    print(f"   [CONDITION] LLM returned NO_MATCH")
+                    return item_condition
+                    
+                # Try partial match on LLM result
+                for gc in graph_conditions:
+                    if gc.lower() in result.lower() or result.lower() in gc.lower():
+                        print(f"   [CONDITION] LLM partial match: '{item_condition}' -> '{gc}'")
+                        return gc
+                        
+            except Exception as e:
+                print(f"   [WARN] LLM condition matching failed: {e}")
+        
+        # No match found
+        print(f"   [CONDITION] No match found for '{item_condition}'")
+        return item_condition  # Return original if no match
 
     # =========================================================================
     # COMPONENT 2: Category Mapper (Fuzzy Match + LLM Fallback)
@@ -144,10 +251,7 @@ Do not invent new categories. If unsure, pick the closest match.
 OUTPUT: Just the category name, nothing else."""
 
         try:
-            resp = await self.client.aio.models.generate_content(
-                model=self.model,
-                contents=prompt
-            )
+            resp = await self.generate_with_retry(prompt)
             mapped_cat = resp.text.strip().strip('"').strip("'")
             
             # Validate it's in the list
@@ -159,86 +263,35 @@ OUTPUT: Just the category name, nothing else."""
             if fuzzy_result:
                 return fuzzy_result
                 
-            print(f"   [WARN] LLM returned invalid category '{mapped_cat}', using first valid category.")
-            return valid_cats[0]
+            print(f"   [WARN] LLM returned invalid category '{mapped_cat}', using 'General Products'.")
+            return "General Products" if "General Products" in valid_cats else valid_cats[0]
         except Exception as e:
             print(f"   [WARN] Category mapping failed: {e}")
-            return valid_cats[0] if valid_cats else "General"
+            return "General Products" if "General Products" in valid_cats else (valid_cats[0] if valid_cats else "General")
 
     # =========================================================================
-    # COMPONENT 3: Query Generator (LLM)
+    # COMPONENT 3: Query Generator (Deterministic)
     # =========================================================================
     async def generate_policy_query(self, context: Dict[str, Any]) -> str:
         """
-        Uses LLM to generate a Cypher query for fetching applicable rules.
-        """
-        category = context.get("mapped_category", "General")
-        membership = context.get("membership_tier", "Standard")
-        seller_type = context.get("seller_type", "BestBuy")
+        Generates a simple, reliable Cypher query for fetching applicable rules.
         
-        prompt = f"""You are a Neo4j Cypher Query Generator for a return policy knowledge graph.
-
-TASK:
-Generate a Cypher query to find the applicable return rule for:
-- Product Category: {category}
-- Customer Membership Tier: {membership}
-- Seller Type: {seller_type}
-
-SCHEMA CONTEXT:
-- Node Labels: ProductCategory, ReturnRule, MembershipTier, Fee, Condition, Exception
-- Key Relationships: HAS_RETURN_RULE, OVERRIDES, REQUIRES_CONDITION, HAS_FEE
-- Properties on ReturnRule: name, days_allowed, restocking_fee_percent, source_citation
-- Properties on Condition: name, required_state
-
-QUERY REQUIREMENTS:
-1. Start from ProductCategory with name = '{category}'
-2. Follow HAS_RETURN_RULE to get the base rule
-3. Check for OVERRIDES relationships that might apply based on membership tier
-4. Return: rule name, days_allowed, restocking_fee_percent, any conditions, source_citation
-5. Order by specificity (overrides first, then base rules)
-6. LIMIT 3
-
-SAFETY:
-- Only use MATCH, OPTIONAL MATCH, WHERE, RETURN, ORDER BY, LIMIT
-- No CREATE, DELETE, SET, MERGE, or mutations
-
-OUTPUT FORMAT:
-Return ONLY the Cypher query, no explanation, no markdown code blocks."""
-
-        try:
-            resp = await self.client.aio.models.generate_content(
-                model=self.model,
-                contents=prompt
-            )
-            cypher = resp.text.strip()
-            
-            # Remove markdown code blocks if present
-            if cypher.startswith("```"):
-                lines = cypher.split("\n")
-                cypher = "\n".join(lines[1:-1] if lines[-1] == "```" else lines[1:])
-            
-            # Basic safety validation
-            cypher_upper = cypher.upper()
-            forbidden = ["CREATE", "DELETE", "SET ", "MERGE", "REMOVE", "DROP"]
-            for word in forbidden:
-                if word in cypher_upper:
-                    raise ValueError(f"Unsafe query: contains '{word}'")
-            
-            return cypher.strip()
-        except Exception as e:
-            print(f"   [WARN] Query generation failed: {e}")
-            # Fallback to a safe default query
-            return f"""
-                MATCH (pc:ProductCategory {{name: '{category}'}})-[:HAS_RETURN_RULE]->(r:ReturnRule)
-                OPTIONAL MATCH (r)-[:HAS_FEE]->(f:Fee)
-                OPTIONAL MATCH (r)-[:REQUIRES_CONDITION]->(c:Condition)
-                RETURN r.name as rule_name, 
-                       r.days_allowed as days_allowed, 
-                       r.restocking_fee_percent as restocking_fee_percent,
-                       r.source_citation as source_citation,
-                       collect(DISTINCT c.name) as conditions
-                LIMIT 3
-            """
+        Note: LLM-generated queries were unreliable (Neo4j syntax errors).
+        Using deterministic query template for 100% reliability.
+        """
+        category = context.get("mapped_category", "General Products")
+        
+        # Simple, reliable query that always works
+        query = f"""
+            MATCH (pc:ProductCategory {{name: '{category}'}})-[:HAS_RETURN_RULE]->(r:ReturnRule)
+            RETURN r.name as rule_name, 
+                   r.days_allowed as days_allowed, 
+                   r.source_citation as source_citation
+            LIMIT 3
+        """
+        
+        print(f"   [QUERY] Generated Cypher query")
+        return query
 
     # =========================================================================
     # COMPONENT 4: Query Executor
@@ -359,17 +412,18 @@ Return ONLY the Cypher query, no explanation, no markdown code blocks."""
         """
         user_request = user_request or {}
         
-        # Handle nested structure: data may be under 'data' key
+        # Handle nested structure: data may be under 'data' key or at root
         if "data" in verified_order:
             data = verified_order["data"]
             order_details = data.get("order_details", {})
             items = data.get("items", [])
             customer = data.get("customer", {})
         else:
+            # Data is at root level
             data = verified_order
-            order_details = verified_order
+            order_details = verified_order.get("order_details", {})  # FIX: Get nested order_details
             items = verified_order.get("items") or verified_order.get("order_items", [])
-            customer = {}
+            customer = verified_order.get("customer", {})
         
         # Extract order_id from various possible locations
         order_id = (

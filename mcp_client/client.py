@@ -22,6 +22,9 @@ sys.path.append(PROJECT_ROOT)
 # Import the GCS download function
 from extract_json_gcs import download_blob
 
+# Import the Adjudicator Agent
+from policy_compiler_agents.adjudicator_agent import Adjudicator
+
 # Configure Gemini Client
 api_key = os.getenv("GEMINI_API_KEY")
 if not api_key:
@@ -151,7 +154,7 @@ class RefundsClient:
 
         try:
             response = await self.generate_with_retry(
-                model='gemini-2.0-flash', 
+                model='gemini-3-flash-preview', 
                 contents=prompt,
                 config={"response_mime_type": "application/json"}
             )
@@ -229,7 +232,7 @@ class RefundsClient:
             
             try:
                 response = await self.generate_with_retry(
-                    model='gemini-2.0-flash', 
+                    model='gemini-3-flash-preview', 
                     contents=prompt_content,
                     config={"response_mime_type": "application/json"}
                 )
@@ -385,6 +388,32 @@ class RefundsClient:
             with open(verified_path, "w", encoding='utf-8') as f:
                 json.dump(verified_record, f, indent=2)
             print(f"\n✅ Verified Order Details saved to {verified_path}")
+            
+            # --- Adjudication ---
+            print("\n" + "="*50)
+            print("RUNNING ADJUDICATOR AGENT")
+            print("="*50)
+            
+            try:
+                adjudicator = Adjudicator()
+                adjudication_result = await adjudicator.adjudicate(verified_record)
+                
+                # Save adjudication decision
+                decision_path = os.path.join(artifacts_dir, "adjudication_decision.json")
+                with open(decision_path, "w", encoding='utf-8') as f:
+                    json.dump(adjudication_result, f, indent=2, default=str)
+                print(f"\n✅ Adjudication Decision saved to {decision_path}")
+                
+                # Print summary
+                print("\n" + "="*50)
+                print(f"DECISION: {adjudication_result.get('decision', 'UNKNOWN')}")
+                print(f"REASON: {adjudication_result.get('details', {}).get('reason', 'N/A')}")
+                print("="*50)
+                
+            except Exception as e:
+                print(f"\n⚠️ Adjudication failed: {e}")
+                import traceback
+                traceback.print_exc()
         else:
             print("\nℹ️ No verified order data was returned to save.")
 
@@ -423,4 +452,12 @@ async def main():
         print("Aborting: JSON input file could not be found.")
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    import sys
+    # Windows-specific: Use SelectorEventLoop to prevent SSL cleanup errors
+    if sys.platform == 'win32':
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        pass
