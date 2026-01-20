@@ -2,6 +2,7 @@ import asyncio
 import sys
 import os
 import json
+import time
 from contextlib import AsyncExitStack
 from typing import Dict, Any, Optional, List
 
@@ -47,6 +48,27 @@ class RefundsClient:
                 "env": {"PYTHONPATH": PROJECT_ROOT}
             }
         }
+    
+    async def generate_with_retry(self, model, contents, config=None, max_retries=5):
+        """Helper to call Gemini with exponential backoff for 429 errors."""
+        base_delay = 2
+        for attempt in range(max_retries):
+            try:
+                response = gemini_client.models.generate_content(
+                    model=model,
+                    contents=contents,
+                    config=config
+                )
+                return response
+            except Exception as e:
+                error_str = str(e)
+                if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+                    delay = base_delay * (2 ** attempt)
+                    print(f"⚠️ Quota exceeded (429). Retrying in {delay}s...")
+                    await asyncio.sleep(delay)
+                else:
+                    raise e
+        raise Exception(f"Failed after {max_retries} retries due to quota exhaustion.")
 
     async def connect_to_server(self, server_name: str, config: Dict[str, Any]):
         """Connects to a single MCP server."""
@@ -94,6 +116,7 @@ class RefundsClient:
             "invoice_number": "string",
             "order_invoice_id": "string",
             "order_date": "string (YYYY-MM-DD format if possible)",
+            "return_request_date": "string (YYYY-MM-DD format - date email was received)",
             "ship_mode": "string",
             "ship_city": "string",
             "ship_state": "string",
@@ -113,8 +136,10 @@ class RefundsClient:
                     "line_total": "number"
                 }}
             ],
+            "item_condition": "string (Allowed values: 'NEW_UNOPENED', 'OPENED_LIKE_NEW', 'DAMAGED_DEFECTIVE', 'MISSING_PARTS', 'UNKNOWN')",
             "return_category": "string (RETURN / REPLACEMENT / REFUND)",
-            "return_reason": "string (Detailed summary of the reason for return/refund)",
+            "return_reason_category": "string (Allowed values: 'CHANGED_MIND', 'DEFECTIVE', 'WRONG_ITEM_SENT', 'ARRIVED_LATE', 'OTHER')",
+            "return_reason": "string (Detailed and entire summary of the reason for return/refund)",
             "confidence_score": "number (0.0 to 1.0 - how confident are you in this extraction)"
         }}
 
@@ -125,7 +150,7 @@ class RefundsClient:
         """
 
         try:
-            response = gemini_client.models.generate_content(
+            response = await self.generate_with_retry(
                 model='gemini-2.0-flash', 
                 contents=prompt,
                 config={"response_mime_type": "application/json"}
@@ -197,10 +222,13 @@ class RefundsClient:
         for i in range(max_turns):
             print(f"\n--- Turn {i+1} ---")
             
+            # Rate limiting sleep
+            await asyncio.sleep(2)
+            
             prompt_content = "\n".join(messages) + "\n\nWhat is the next step? Output valid JSON only."
             
             try:
-                response = gemini_client.models.generate_content(
+                response = await self.generate_with_retry(
                     model='gemini-2.0-flash', 
                     contents=prompt_content,
                     config={"response_mime_type": "application/json"}
@@ -345,6 +373,14 @@ class RefundsClient:
         verified_record = await self.verify_request_with_db(extracted_data)
 
         if verified_record:
+            # Merge extracted intent fields into verified record
+            verified_record["return_request_date"] = extracted_data.get("return_request_date")
+            verified_record["return_category"] = extracted_data.get("return_category")
+            verified_record["return_reason_category"] = extracted_data.get("return_reason_category")
+            verified_record["return_reason"] = extracted_data.get("return_reason")
+            verified_record["item_condition"] = extracted_data.get("item_condition")
+            verified_record["confidence_score"] = extracted_data.get("confidence_score")
+            
             verified_path = os.path.join(artifacts_dir, "verified_order.json")
             with open(verified_path, "w", encoding='utf-8') as f:
                 json.dump(verified_record, f, indent=2)
