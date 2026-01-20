@@ -38,6 +38,7 @@ _ORDER_SELECT_COLUMNS = """
     o.ship_state                AS ship_state,
     o.ship_country              AS ship_country,
     o.delivered_at              AS delivered_at,
+    o.seller_type               AS seller_type,
     o.created_at                AS created_at,
     o.updated_at                AS updated_at
 """
@@ -62,6 +63,7 @@ _CUSTOMER_SELECT_COLUMNS = """
     c.customer_email    AS customer_email,
     c.full_name         AS full_name,
     c.phone             AS phone,
+    c.membership_tier   AS membership_tier,
     c.created_at        AS created_at
 """
 

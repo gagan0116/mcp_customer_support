@@ -28,6 +28,7 @@ CREATE TABLE customers (
   customer_email  TEXT UNIQUE,
   full_name       TEXT NOT NULL,
   phone           TEXT,
+  membership_tier TEXT,
   created_at      TIMESTAMPTZ NOT NULL,
   metadata        JSONB
 );
@@ -54,6 +55,7 @@ CREATE TABLE orders (
   refunded_amount         NUMERIC(12,2) NOT NULL,
   order_state             TEXT NOT NULL,
   delivered_at            TIMESTAMPTZ,
+  seller_type             TEXT,
 
   metadata                JSONB,
   created_at              TIMESTAMPTZ NOT NULL,
