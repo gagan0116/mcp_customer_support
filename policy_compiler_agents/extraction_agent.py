@@ -125,21 +125,26 @@ async def extract_from_page(
     schema: Dict[str, Any],
     client,
     model: str = "gemini-3-flash-preview",
-    max_retries: int = 3
+    max_retries: int = 3,
+    timeout_seconds: int = 60
 ) -> Dict[str, Any]:
-    """Extract entities from a single page with retry logic."""
+    """Extract entities from a single page with retry logic and timeout."""
     prompt = build_page_prompt(page, schema)
     
     for attempt in range(max_retries):
         try:
-            response = await client.aio.models.generate_content(
-                model=model,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    system_instruction=PAGE_EXTRACTION_PROMPT,
-                    temperature=0.0,
-                    response_mime_type="application/json",
+            # Wrap API call with timeout
+            response = await asyncio.wait_for(
+                client.aio.models.generate_content(
+                    model=model,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        system_instruction=PAGE_EXTRACTION_PROMPT,
+                        temperature=0.0,
+                        response_mime_type="application/json",
+                    ),
                 ),
+                timeout=timeout_seconds
             )
             
             result = json.loads(response.text)
@@ -151,6 +156,9 @@ async def extract_from_page(
             
             return result
             
+        except asyncio.TimeoutError:
+            print(f"   [WARN] Page {page['page_num']} attempt {attempt + 1} timed out after {timeout_seconds}s. Retrying...")
+            await asyncio.sleep(2)
         except (json.JSONDecodeError, Exception) as e:
             if attempt < max_retries - 1:
                 print(f"   [WARN] Page {page['page_num']} attempt {attempt + 1} failed: {str(e)[:50]}. Retrying...")
@@ -188,10 +196,15 @@ async def extract_all_pages(
     all_entities = []
     all_relationships = []
     
-    for page in pages:
+    for i, page in enumerate(pages):
+        print(f"   [EXTRACT] Processing page {i + 1}/{len(pages)}")
         result = await extract_from_page(page, schema, client, model)
         all_entities.extend(result.get("entities", []))
         all_relationships.extend(result.get("relationships", []))
+        
+        # Small delay between pages to avoid rate limiting
+        if i < len(pages) - 1:
+            await asyncio.sleep(1)
     
     print(f"   [EXTRACT] Raw extraction: {len(all_entities)} entities, {len(all_relationships)} relationships")
     
