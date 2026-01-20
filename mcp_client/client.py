@@ -3,6 +3,8 @@ import sys
 import os
 import json
 import time
+import uuid
+from datetime import datetime, timezone
 from contextlib import AsyncExitStack
 from typing import Dict, Any, Optional, List
 
@@ -24,6 +26,9 @@ from extract_json_gcs import download_blob
 
 # Import the Adjudicator Agent
 from policy_compiler_agents.adjudicator_agent import Adjudicator
+
+# Import database connection for refund_cases table
+from db_verification.db import db_connection
 
 # Configure Gemini Client
 api_key = os.getenv("GEMINI_API_KEY")
@@ -72,6 +77,161 @@ class RefundsClient:
                 else:
                     raise e
         raise Exception(f"Failed after {max_retries} retries due to quota exhaustion.")
+
+    def insert_refund_case(
+        self,
+        email_data: Dict[str, Any],
+        extracted_data: Dict[str, Any],
+        verified_record: Optional[Dict[str, Any]],
+        adjudication_result: Optional[Dict[str, Any]] = None
+    ) -> Optional[str]:
+        """
+        Insert a record into the refund_cases table.
+        Returns the case_id if successful, None otherwise.
+        """
+        try:
+            case_id = str(uuid.uuid4())
+            now = datetime.now(timezone.utc)
+            
+            # Extract fields from email_data
+            from_email = email_data.get("user_id", "")
+            received_at_str = email_data.get("received_at")
+            received_at = datetime.fromisoformat(received_at_str.replace("Z", "+00:00")) if received_at_str else now
+            classification = email_data.get("category", "UNKNOWN")
+            confidence = email_data.get("confidence")
+            email_body = email_data.get("email_body", "")
+            attachments = email_data.get("attachments", [])
+            
+            # Generate source_message_id from email data or use a unique identifier
+            source_message_id = email_data.get("message_id") or f"{from_email}_{received_at.strftime('%Y%m%dT%H%M%SZ')}_{case_id[:8]}"
+            
+            # Extract customer name from extracted_data
+            from_name = extracted_data.get("full_name")
+            
+            # Extract invoice identifiers from extracted_data
+            extracted_invoice_number = extracted_data.get("invoice_number")
+            extracted_order_invoice_id = extracted_data.get("order_invoice_id")
+            
+            # Get customer_id and order_id from verified_record if available
+            # The verified_record has nested structure: data.customer.customer_id and data.order_details.order_id
+            customer_id = None
+            order_id = None
+            if verified_record:
+                data_section = verified_record.get("data", {})
+                if data_section:
+                    customer_info = data_section.get("customer", {})
+                    order_details = data_section.get("order_details", {})
+                    customer_id = customer_info.get("customer_id")
+                    order_id = order_details.get("order_id")
+                # Fallback to top-level if nested structure not found
+                if not customer_id:
+                    customer_id = verified_record.get("customer_id")
+                if not order_id:
+                    order_id = verified_record.get("order_id")
+            
+            # Determine verification status
+            if verified_record:
+                verification_status = "VERIFIED"
+            else:
+                verification_status = "PENDING_REVIEW"
+            
+            # Build verification notes
+            verification_notes = None
+            if adjudication_result:
+                decision = adjudication_result.get("decision", "")
+                reason = adjudication_result.get("details", {}).get("reason", "")
+                verification_notes = f"Decision: {decision}. {reason}"
+            
+            # Prepare metadata
+            metadata = {
+                "extraction_confidence": extracted_data.get("confidence_score"),
+                "return_reason_category": extracted_data.get("return_reason_category"),
+                "return_reason": extracted_data.get("return_reason"),
+                "item_condition": extracted_data.get("item_condition"),
+            }
+            if adjudication_result:
+                metadata["adjudication"] = adjudication_result
+            
+            # Prepare attachments JSONB (store filenames only, not full data)
+            attachments_json = [
+                {"filename": att.get("filename"), "mimeType": att.get("mimeType")}
+                for att in attachments
+            ] if attachments else None
+            
+            insert_sql = """
+                INSERT INTO refund_cases (
+                    case_id, case_source, source_message_id, received_at,
+                    from_email, from_name, subject, body,
+                    customer_id, order_id,
+                    extracted_invoice_number, extracted_order_invoice_id,
+                    classification, confidence,
+                    verification_status, verification_notes,
+                    attachments, metadata,
+                    created_at, updated_at
+                ) VALUES (
+                    %s, %s, %s, %s,
+                    %s, %s, %s, %s,
+                    %s, %s,
+                    %s, %s,
+                    %s, %s,
+                    %s, %s,
+                    %s, %s,
+                    %s, %s
+                )
+                ON CONFLICT (source_message_id) DO UPDATE SET
+                    customer_id = EXCLUDED.customer_id,
+                    order_id = EXCLUDED.order_id,
+                    verification_status = EXCLUDED.verification_status,
+                    verification_notes = EXCLUDED.verification_notes,
+                    metadata = EXCLUDED.metadata,
+                    updated_at = EXCLUDED.updated_at
+                RETURNING case_id
+            """
+            
+            params = (
+                case_id,
+                "EMAIL",  # case_source
+                source_message_id,
+                received_at,
+                from_email,
+                from_name,
+                None,  # subject (not available in current data structure)
+                email_body,
+                customer_id,
+                order_id,
+                extracted_invoice_number,
+                extracted_order_invoice_id,
+                classification,
+                confidence,
+                verification_status,
+                verification_notes,
+                json.dumps(attachments_json) if attachments_json else None,
+                json.dumps(metadata),
+                now,
+                now
+            )
+            
+            with db_connection() as conn:
+                cur = conn.cursor()
+                try:
+                    cur.execute(insert_sql, params)
+                    result = cur.fetchone()
+                    conn.commit()
+                    returned_case_id = result[0] if result else case_id
+                    print(f"\n✅ Refund case inserted/updated in database: {returned_case_id}")
+                    return returned_case_id
+                except Exception as db_err:
+                    conn.rollback()
+                    print(f"\n❌ Database error inserting refund case: {db_err}")
+                    raise
+                finally:
+                    cur.close()
+                    
+        except Exception as e:
+            print(f"\n❌ Error inserting refund case: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
 
     async def connect_to_server(self, server_name: str, config: Dict[str, Any]):
         """Connects to a single MCP server."""
@@ -154,7 +314,7 @@ class RefundsClient:
 
         try:
             response = await self.generate_with_retry(
-                model='gemini-3-flash-preview', 
+                model='gemini-2.5-flash', 
                 contents=prompt,
                 config={"response_mime_type": "application/json"}
             )
@@ -232,15 +392,27 @@ class RefundsClient:
             
             try:
                 response = await self.generate_with_retry(
-                    model='gemini-3-flash-preview', 
+                    model='gemini-2.5-flash', 
                     contents=prompt_content,
                     config={"response_mime_type": "application/json"}
                 )
                 
                 decision_text = response.text
+                
+                # Handle None or empty response from Gemini
+                if decision_text is None or decision_text.strip() == "":
+                    print(f"⚠️ Empty response from LLM on turn {i+1}. Retrying...")
+                    messages.append("System: Your previous response was empty. Please provide a valid JSON response.")
+                    continue
+                
                 print(f"🤖 Agent thought: {decision_text}")
                 
-                decision = json.loads(decision_text)
+                try:
+                    decision = json.loads(decision_text)
+                except json.JSONDecodeError as json_err:
+                    print(f"⚠️ Failed to parse JSON response: {json_err}")
+                    messages.append(f"System: Your response was not valid JSON. Error: {json_err}. Please output valid JSON only.")
+                    continue
 
                 if "action" in decision and decision["action"] == "terminate":
                     print(f"🏁 Agent Finished: {decision.get('reason')}")
@@ -297,6 +469,9 @@ class RefundsClient:
 
         with open(json_file_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
+        
+        # Store original email data for refund_cases table
+        email_data = data.copy()
 
         category = data.get("category", "NONE")
         print(f"\nProcessing Request Category: {category}")
@@ -410,12 +585,36 @@ class RefundsClient:
                 print(f"REASON: {adjudication_result.get('details', {}).get('reason', 'N/A')}")
                 print("="*50)
                 
+                # Insert refund case into database
+                self.insert_refund_case(
+                    email_data=email_data,
+                    extracted_data=extracted_data,
+                    verified_record=verified_record,
+                    adjudication_result=adjudication_result
+                )
+                
             except Exception as e:
                 print(f"\n⚠️ Adjudication failed: {e}")
                 import traceback
                 traceback.print_exc()
+                
+                # Still insert refund case even if adjudication failed
+                self.insert_refund_case(
+                    email_data=email_data,
+                    extracted_data=extracted_data,
+                    verified_record=verified_record,
+                    adjudication_result=None
+                )
         else:
             print("\nℹ️ No verified order data was returned to save.")
+            
+            # Insert refund case with pending review status
+            self.insert_refund_case(
+                email_data=email_data,
+                extracted_data=extracted_data,
+                verified_record=None,
+                adjudication_result=None
+            )
 
     async def cleanup(self):
         await self.exit_stack.aclose()

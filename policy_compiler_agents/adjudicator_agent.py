@@ -46,7 +46,7 @@ def normalize_condition_static(condition: str) -> list:
     return [condition.lower().replace("_", " ")]
 
 class Adjudicator:
-    def __init__(self, model: str = "gemini-3-flash-preview"):
+    def __init__(self, model: str = "gemini-2.5-flash"):
         self.model = model
         self.client = get_gemini_client()
         self.schema_cache = {
