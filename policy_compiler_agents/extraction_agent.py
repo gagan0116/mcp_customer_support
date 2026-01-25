@@ -5,6 +5,12 @@ Extraction Agent - 3-Phase Pipeline for Policy Knowledge Graph Construction.
 Phase 1: TripletExtractor - LLM-based entity/relationship extraction
 Phase 2: GraphLinker - Python-based validation and resolution
 Phase 3: CypherGenerator - Cypher statement generation
+
+Gemini 3 Features Used:
+- ThinkingConfig (high level) - Deep reasoning for exhaustive extraction
+- response_schema - Structured output enforcement
+- response_mime_type - JSON mode
+- system_instruction - Separated from user prompt
 """
 
 import os
@@ -14,8 +20,8 @@ import re
 from difflib import SequenceMatcher
 from typing import Any, Dict, List, Tuple, Optional
 
-from google import genai
 from google.genai import types
+from google.genai.types import ThinkingConfig, Schema
 
 from .tools import (
     get_gemini_client,
@@ -24,6 +30,42 @@ from .tools import (
     load_artifact,
     CitationManager,
     POLICY_DOCS_DIR,
+)
+
+
+# =============================================================================
+# GEMINI 3 SCHEMA ENFORCEMENT
+# =============================================================================
+
+ENTITY_SCHEMA = Schema(
+    type="object",
+    properties={
+        "label": Schema(type="string", description="Node label from schema"),
+        "properties": Schema(type="object", description="Entity properties including 'name'"),
+        "text_excerpt": Schema(type="string", description="Exact phrase from document for citation"),
+    },
+    required=["label", "properties"]
+)
+
+RELATIONSHIP_EXTRACT_SCHEMA = Schema(
+    type="object",
+    properties={
+        "from_label": Schema(type="string", description="Source node label"),
+        "from_name": Schema(type="string", description="Source entity name - must match entity name exactly"),
+        "type": Schema(type="string", description="Relationship type in UPPER_SNAKE_CASE"),
+        "to_label": Schema(type="string", description="Target node label"),
+        "to_name": Schema(type="string", description="Target entity name - must match entity name exactly"),
+    },
+    required=["from_label", "from_name", "type", "to_label", "to_name"]
+)
+
+EXTRACTION_RESPONSE_SCHEMA = Schema(
+    type="object",
+    properties={
+        "entities": Schema(type="array", items=ENTITY_SCHEMA, description="List of extracted entities"),
+        "relationships": Schema(type="array", items=RELATIONSHIP_EXTRACT_SCHEMA, description="List of extracted relationships"),
+    },
+    required=["entities", "relationships"]
 )
 
 # =============================================================================
@@ -124,16 +166,23 @@ async def extract_from_page(
     page: Dict[str, Any],
     schema: Dict[str, Any],
     client,
-    model: str = "gemini-3-flash-preview",
+    model: str = "gemini-3-pro-preview",
     max_retries: int = 3,
-    timeout_seconds: int = 60
+    timeout_seconds: int = 120  # Increased for high thinking mode
 ) -> Dict[str, Any]:
-    """Extract entities from a single page with retry logic and timeout."""
+    """
+    Extract entities from a single page using Gemini 3's Thinking Mode.
+    
+    Gemini 3 Features:
+    - ThinkingConfig(thinking_level="high") for exhaustive extraction
+    - response_schema for structured output enforcement
+    - response_mime_type="application/json" for JSON mode
+    """
     prompt = build_page_prompt(page, schema)
     
     for attempt in range(max_retries):
         try:
-            # Wrap API call with timeout
+            # Wrap API call with timeout (increased for thinking mode)
             response = await asyncio.wait_for(
                 client.aio.models.generate_content(
                     model=model,
@@ -142,12 +191,24 @@ async def extract_from_page(
                         system_instruction=PAGE_EXTRACTION_PROMPT,
                         temperature=0.0,
                         response_mime_type="application/json",
+                        response_schema=EXTRACTION_RESPONSE_SCHEMA,  # Gemini 3: Schema enforcement
+                        thinking_config=ThinkingConfig(
+                            thinking_level="high"  # Gemini 3: Deep reasoning for exhaustive extraction
+                        ),
                     ),
                 ),
                 timeout=timeout_seconds
             )
             
-            result = json.loads(response.text)
+            # Extract response text (handle thinking mode response structure)
+            response_text = response.text
+            if hasattr(response, 'candidates') and response.candidates:
+                for part in response.candidates[0].content.parts:
+                    if hasattr(part, 'text') and not (hasattr(part, 'thought') and part.thought):
+                        response_text = part.text
+                        break
+            
+            result = json.loads(response_text)
             
             # Add page info to each entity for citation
             for entity in result.get("entities", []):
@@ -173,7 +234,7 @@ async def extract_from_page(
 async def extract_all_pages(
     policy_content: str,
     schema: Dict[str, Any],
-    model: str = "gemini-3-flash-preview"
+    model: str = "gemini-3-pro-preview"
 ) -> Tuple[List[Dict], List[Dict]]:
     """
     Phase 1: Extract triplets from all pages.
@@ -459,7 +520,7 @@ async def extract_policy_rules(
             raise ValueError("Schema not found. Run Ontology Designer first.")
     
     if model is None:
-        model = os.getenv("EXTRACTION_MODEL", "gemini-3-flash-preview")
+        model = os.getenv("EXTRACTION_MODEL", "gemini-3-pro-preview")
     
     # Phase 1: Extract raw triplets
     raw_entities, raw_relationships = await extract_all_pages(policy_content, schema, model)
