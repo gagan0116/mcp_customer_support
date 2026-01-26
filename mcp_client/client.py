@@ -267,65 +267,74 @@ class RefundsClient:
 
     async def extract_order_details(self, combined_text):
         """
-        Uses Gemini to extract structured order details from the combined text.
+        Uses Gemini 3 to extract structured order details from the combined text.
+        Uses response_schema for guaranteed structured output.
         """
-        prompt = f"""
-        You are an expert data extraction agent.
-        Your task is to analyze the following customer support email and its attached invoice content.
-        Extract the specific details listed below into a strict JSON format.
+        # Gemini 3 Schema Enforcement - guarantees output structure
+        from google.genai.types import Schema
         
-        If a field is not found in the text, leave it as null or an empty string, do not invent data.
+        ORDER_ITEM_SCHEMA = Schema(
+            type="object",
+            properties={
+                "sku": Schema(type="string", description="Product SKU"),
+                "item_name": Schema(type="string", description="Product name"),
+                "category": Schema(type="string", description="Product category"),
+                "subcategory": Schema(type="string", description="Product subcategory"),
+                "quantity": Schema(type="integer", description="Quantity ordered"),
+                "unit_price": Schema(type="number", description="Price per unit"),
+                "line_total": Schema(type="number", description="Total for this line item"),
+            }
+        )
         
-        REQUIRED JSON STRUCTURE:
-        {{
-            "customer_email": "string (Sender's email)",
-            "full_name": "string",
-            "phone": "string",
-            "invoice_number": "string",
-            "order_invoice_id": "string",
-            "order_date": "string (YYYY-MM-DD format if possible)",
-            "return_request_date": "string (YYYY-MM-DD format - date email was received)",
-            "ship_mode": "string",
-            "ship_city": "string",
-            "ship_state": "string",
-            "ship_country": "string",
-            "currency": "string (e.g., USD)",
-            "discount_amount": "number",
-            "shipping_amount": "number",
-            "total_amount": "number",
-            "order_items": [
-                {{
-                    "sku": "string",
-                    "item_name": "string",
-                    "category": "string",
-                    "subcategory": "string",
-                    "quantity": "integer",
-                    "unit_price": "number",
-                    "line_total": "number"
-                }}
-            ],
-            "item_condition": "string (Allowed values: 'NEW_UNOPENED', 'OPENED_LIKE_NEW', 'DAMAGED_DEFECTIVE', 'MISSING_PARTS', 'UNKNOWN')",
-            "return_category": "string (RETURN / REPLACEMENT / REFUND)",
-            "return_reason_category": "string (Allowed values: 'CHANGED_MIND', 'DEFECTIVE', 'WRONG_ITEM_SENT', 'ARRIVED_LATE', 'OTHER')",
-            "return_reason": "string (Detailed and entire summary of the reason for return/refund)",
-            "confidence_score": "number (0.0 to 1.0 - how confident are you in this extraction)"
-        }}
+        EXTRACTION_SCHEMA = Schema(
+            type="object",
+            properties={
+                "customer_email": Schema(type="string", description="Sender's email address"),
+                "full_name": Schema(type="string", description="Customer full name"),
+                "phone": Schema(type="string", description="Customer phone number"),
+                "invoice_number": Schema(type="string", description="Invoice number"),
+                "order_invoice_id": Schema(type="string", description="Order/Invoice ID"),
+                "order_date": Schema(type="string", description="Order date in YYYY-MM-DD format"),
+                "return_request_date": Schema(type="string", description="Date email was received"),
+                "ship_mode": Schema(type="string", description="Shipping method"),
+                "ship_city": Schema(type="string", description="Shipping city"),
+                "ship_state": Schema(type="string", description="Shipping state"),
+                "ship_country": Schema(type="string", description="Shipping country"),
+                "currency": Schema(type="string", description="Currency code e.g. USD"),
+                "discount_amount": Schema(type="number", description="Discount applied"),
+                "shipping_amount": Schema(type="number", description="Shipping cost"),
+                "total_amount": Schema(type="number", description="Order total"),
+                "order_items": Schema(type="array", items=ORDER_ITEM_SCHEMA, description="List of order items"),
+                "item_condition": Schema(type="string", description="NEW_UNOPENED, OPENED_LIKE_NEW, DAMAGED_DEFECTIVE, MISSING_PARTS, or UNKNOWN"),
+                "return_category": Schema(type="string", description="RETURN, REPLACEMENT, or REFUND"),
+                "return_reason_category": Schema(type="string", description="CHANGED_MIND, DEFECTIVE, WRONG_ITEM_SENT, ARRIVED_LATE, or OTHER"),
+                "return_reason": Schema(type="string", description="Detailed summary of return reason"),
+                "confidence_score": Schema(type="number", description="Extraction confidence 0.0 to 1.0"),
+            },
+            required=["customer_email"]
+        )
+        
+        prompt = f"""You are an expert data extraction agent.
+Analyze the following customer support email and its attached invoice content.
+Extract all available details. If a field is not found, leave it as null.
 
-        INPUT TEXT:
-        {combined_text}
-        
-        OUTPUT ONLY VALID JSON.
-        """
+INPUT TEXT:
+{combined_text}
+
+Extract all order and customer details from the text above."""
 
         try:
             response = await self.generate_with_retry(
-                model='gemini-2.5-flash', 
+                model='gemini-3-pro-preview',
                 contents=prompt,
-                config={"response_mime_type": "application/json"}
+                config={
+                    "response_mime_type": "application/json",
+                    "response_schema": EXTRACTION_SCHEMA
+                }
             )
             return response.text
         except Exception as e:
-            return f"{{\"error\": \"LLM Extraction failed: {str(e)}\"}}"
+            return f'{{"error": "LLM Extraction failed: {str(e)}"}'
 
     async def verify_request_with_db(self, extracted_data: Dict[str, Any]):
         """
