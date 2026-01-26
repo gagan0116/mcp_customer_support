@@ -37,3 +37,5 @@ client_secret_*.json
 history_id.txt
 __pycache__/
 .env
+defect_images/
+venv/

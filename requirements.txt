@@ -1,4 +1,4 @@
-mcp
+mcp[cli]
 pypdf
 google-api-python-client
 google-auth-httplib2
@@ -7,4 +7,5 @@ llama-parse
 python-dotenv
 nest-asyncio
 neo4j>=5.0.0
-google-genai
+google-generativeai
+Pillow
