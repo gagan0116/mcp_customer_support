@@ -1,13 +1,18 @@
+# defect_analyzer/mcp_server.py
+"""
+Defect Analyzer MCP Server - Analyzes product defect images using Gemini 3 Vision.
+Uses the new google.genai SDK for Gemini 3 compatibility.
+"""
+
 import os
 import base64
 import json
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 load_dotenv()
-
-# Gemini configuration moved to the tool function to handle API keys dynamically
 
 mcp = FastMCP("defect_analyzer")
 
@@ -38,7 +43,7 @@ async def analyze_defect_image(
     image_base64: str = None
 ) -> str:
     """
-    Analyzes a product defect image using Gemini Vision and returns a one-line description.
+    Analyzes a product defect image using Gemini 3 Vision and returns a one-line description.
     
     Args:
         image_path: Local file path to the image (e.g., "C:/images/defect.jpg")
@@ -55,20 +60,16 @@ async def analyze_defect_image(
         })
     
     try:
-        # Use gemini-1.5-pro as requested (closest available stable model for high reasoning)
-        # If you have access to a specific preview model, change the name here.
-        model_name = "gemini-3-pro-preview"
-        
         # Check if API key is valid
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
-             return json.dumps({
+            return json.dumps({
                 "description": "Error: GEMINI_API_KEY not found in environment variables.",
                 "status": "error"
             })
-            
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel(model_name)
+        
+        # Initialize Gemini 3 client (new SDK)
+        client = genai.Client(api_key=api_key)
         
         # Prepare the image
         if image_path:
@@ -78,7 +79,7 @@ async def analyze_defect_image(
                     "status": "error"
                 })
             
-            # Read and encode the image
+            # Read the image
             with open(image_path, "rb") as f:
                 image_data = f.read()
             
@@ -92,21 +93,19 @@ async def analyze_defect_image(
                 ".webp": "image/webp"
             }
             mime_type = mime_types.get(ext, "image/jpeg")
-            
-            image_part = {
-                "mime_type": mime_type,
-                "data": image_data
-            }
         else:
             # Use base64 image
             image_data = base64.b64decode(image_base64)
-            image_part = {
-                "mime_type": "image/jpeg",
-                "data": image_data
-            }
+            mime_type = "image/jpeg"
         
-        # Send to Gemini
-        response = model.generate_content([ANALYSIS_PROMPT, image_part])
+        # Create image part for Gemini 3 (new SDK format)
+        image_part = types.Part.from_bytes(data=image_data, mime_type=mime_type)
+        
+        # Send to Gemini 3 (new SDK pattern)
+        response = client.models.generate_content(
+            model="gemini-3-pro-preview",
+            contents=[ANALYSIS_PROMPT, image_part]
+        )
         
         description = response.text.strip()
         
@@ -126,7 +125,7 @@ async def analyze_defect_image(
         
     except Exception as e:
         return json.dumps({
-            "description": f"Human review required",
+            "description": "Human review required",
             "status": "human_review_required",
             "error_details": str(e)
         })
