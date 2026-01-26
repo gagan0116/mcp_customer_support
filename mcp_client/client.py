@@ -54,6 +54,11 @@ class RefundsClient:
                 "command": sys.executable,
                 "args": ["-m", "db_verification.db_verification_server"],
                 "env": {"PYTHONPATH": PROJECT_ROOT}
+            },
+            "defect_analyzer": {
+                "command": sys.executable,
+                "args": [os.path.join(PROJECT_ROOT, "defect_analyzer", "mcp_server.py")],
+                "env": None
             }
         }
     
@@ -526,6 +531,37 @@ class RefundsClient:
                         
                     except Exception as e:
                         print(f"    Error processing attachment {filename}: {e}")
+                
+                # Handle image attachments for defect analysis
+                elif filename.lower().endswith((".jpg", ".jpeg", ".png", ".gif", ".webp")):
+                    print(f"  - Analyzing defect image: {filename}")
+                    
+                    defect_session = self.sessions.get("defect_analyzer")
+                    if defect_session:
+                        file_data = attachment.get("data", {})
+                        base64_content = ""
+                        if isinstance(file_data, dict):
+                            base64_content = file_data.get("data", "")
+                        elif isinstance(file_data, str):
+                            base64_content = file_data
+                        
+                        if base64_content:
+                            try:
+                                result = await defect_session.call_tool(
+                                    "analyze_defect_image",
+                                    arguments={"image_base64": base64_content}
+                                )
+                                defect_result = json.loads(result.content[0].text)
+                                description = defect_result.get("description", "No analysis available")
+                                status = defect_result.get("status", "unknown")
+                                
+                                combined_text += f"\n\n--- DEFECT IMAGE: {filename} ---\nDefect Analysis: {description}\nAnalysis Status: {status}"
+                                print(f"    Defect Analysis: {description}")
+                            except Exception as e:
+                                print(f"    Error analyzing image {filename}: {e}")
+                                combined_text += f"\n\n--- DEFECT IMAGE: {filename} ---\nDefect Analysis: Human review required (analysis failed)"
+                    else:
+                        print(f"    Warning: defect_analyzer session not available")
 
         # --- Extracion ---
         print("\nSending combined context to LLM for extraction...")

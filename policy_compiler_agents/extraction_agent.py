@@ -21,7 +21,6 @@ from difflib import SequenceMatcher
 from typing import Any, Dict, List, Tuple, Optional
 
 from google.genai import types
-from google.genai.types import ThinkingConfig, Schema
 
 from .tools import (
     get_gemini_client,
@@ -140,7 +139,7 @@ async def extract_from_page(
     client,
     model: str = "gemini-3-pro-preview",
     max_retries: int = 3,
-    timeout_seconds: int = 120  # Increased for high thinking mode
+    timeout_seconds: int = 180  # Increased timeout for large pages
 ) -> Dict[str, Any]:
     """
     Extract entities from a single page using Gemini 3's Thinking Mode.
@@ -154,9 +153,9 @@ async def extract_from_page(
     
     for attempt in range(max_retries):
         try:
-            # Wrap API call with timeout (increased for thinking mode)
-            # NOTE: response_schema not used here because entity properties are dynamic
-            # (different properties for different node types). Using JSON mode only.
+            # Wrap API call with timeout
+            # NOTE: thinking_config is NOT compatible with response_mime_type="application/json"
+            # Using JSON mode for reliable structured output
             response = await asyncio.wait_for(
                 client.aio.models.generate_content(
                     model=model,
@@ -164,9 +163,6 @@ async def extract_from_page(
                     config=types.GenerateContentConfig(
                         system_instruction=PAGE_EXTRACTION_PROMPT,
                         response_mime_type="application/json",
-                        thinking_config=ThinkingConfig(
-                            thinking_level="medium"
-                        ),
                     ),
                 ),
                 timeout=timeout_seconds
