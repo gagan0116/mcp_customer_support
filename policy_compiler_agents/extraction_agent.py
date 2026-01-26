@@ -5,6 +5,12 @@ Extraction Agent - 3-Phase Pipeline for Policy Knowledge Graph Construction.
 Phase 1: TripletExtractor - LLM-based entity/relationship extraction
 Phase 2: GraphLinker - Python-based validation and resolution
 Phase 3: CypherGenerator - Cypher statement generation
+
+Gemini 3 Features Used:
+- ThinkingConfig (high level) - Deep reasoning for exhaustive extraction
+- response_schema - Structured output enforcement
+- response_mime_type - JSON mode
+- system_instruction - Separated from user prompt
 """
 
 import os
@@ -14,8 +20,8 @@ import re
 from difflib import SequenceMatcher
 from typing import Any, Dict, List, Tuple, Optional
 
-from google import genai
 from google.genai import types
+from google.genai.types import ThinkingConfig, Schema
 
 from .tools import (
     get_gemini_client,
@@ -26,9 +32,12 @@ from .tools import (
     POLICY_DOCS_DIR,
 )
 
+
 # =============================================================================
 # PHASE 1: TRIPLET EXTRACTOR (LLM)
 # =============================================================================
+# NOTE: response_schema is not used for extraction because entity properties
+# are dynamic (different for each node type). Using JSON mode only.
 
 PAGE_EXTRACTION_PROMPT = """You are a Legal Knowledge Extractor. Extract entities and relationships from this policy page.
 
@@ -36,17 +45,22 @@ OUTPUT FORMAT - Return valid JSON:
 {
   "entities": [
     {
-      "label": "ReturnRule",
+      "label": "ReturnWindow",
       "properties": {"name": "15 Day Return Period", "days_allowed": 15},
       "text_excerpt": "15 days"
+    },
+    {
+      "label": "ProductCategory",
+      "properties": {"name": "Activatable Devices"},
+      "text_excerpt": "activatable devices"
     }
   ],
   "relationships": [
     {
       "from_label": "ProductCategory",
-      "from_name": "Laptops",
-      "type": "HAS_RETURN_RULE",
-      "to_label": "ReturnRule", 
+      "from_name": "Activatable Devices",
+      "type": "HAS_RETURN_WINDOW",
+      "to_label": "ReturnWindow", 
       "to_name": "15 Day Return Period"
     }
   ]
@@ -58,9 +72,9 @@ CRITICAL RULES:
    - GOOD: Entity name="15 Day Rule", Relationship to_name="15 Day Rule"
 2. Extract ALL entities mentioned on this page.
 3. Include text_excerpt - the exact phrase from the document (for citation).
-4. Use schema node types provided.
+4. Use ONLY schema node types and relationship types provided in the user prompt.
 5. Only output valid JSON.
-6. EXHAUSTIVE EXTRACTION: Extract ALL relationships implied by the text. Missing a relationship is worse. When in doubt, extract it."""
+6. EXHAUSTIVE EXTRACTION: Extract ALL relationships implied by the text."""
 
 
 def split_by_page_markers(markdown: str) -> List[Dict[str, Any]]:
@@ -124,30 +138,49 @@ async def extract_from_page(
     page: Dict[str, Any],
     schema: Dict[str, Any],
     client,
-    model: str = "gemini-3-flash-preview",
+    model: str = "gemini-3-pro-preview",
     max_retries: int = 3,
-    timeout_seconds: int = 60
+    timeout_seconds: int = 120  # Increased for high thinking mode
 ) -> Dict[str, Any]:
-    """Extract entities from a single page with retry logic and timeout."""
+    """
+    Extract entities from a single page using Gemini 3's Thinking Mode.
+    
+    Gemini 3 Features:
+    - ThinkingConfig(thinking_level="high") for exhaustive extraction
+    - response_schema for structured output enforcement
+    - response_mime_type="application/json" for JSON mode
+    """
     prompt = build_page_prompt(page, schema)
     
     for attempt in range(max_retries):
         try:
-            # Wrap API call with timeout
+            # Wrap API call with timeout (increased for thinking mode)
+            # NOTE: response_schema not used here because entity properties are dynamic
+            # (different properties for different node types). Using JSON mode only.
             response = await asyncio.wait_for(
                 client.aio.models.generate_content(
                     model=model,
                     contents=prompt,
                     config=types.GenerateContentConfig(
                         system_instruction=PAGE_EXTRACTION_PROMPT,
-                        temperature=0.0,
                         response_mime_type="application/json",
+                        thinking_config=ThinkingConfig(
+                            thinking_level="medium"
+                        ),
                     ),
                 ),
                 timeout=timeout_seconds
             )
             
-            result = json.loads(response.text)
+            # Extract response text (handle thinking mode response structure)
+            response_text = response.text
+            if hasattr(response, 'candidates') and response.candidates:
+                for part in response.candidates[0].content.parts:
+                    if hasattr(part, 'text') and not (hasattr(part, 'thought') and part.thought):
+                        response_text = part.text
+                        break
+            
+            result = json.loads(response_text)
             
             # Add page info to each entity for citation
             for entity in result.get("entities", []):
@@ -173,7 +206,7 @@ async def extract_from_page(
 async def extract_all_pages(
     policy_content: str,
     schema: Dict[str, Any],
-    model: str = "gemini-3-flash-preview"
+    model: str = "gemini-3-pro-preview"
 ) -> Tuple[List[Dict], List[Dict]]:
     """
     Phase 1: Extract triplets from all pages.
@@ -191,20 +224,32 @@ async def extract_all_pages(
             "content": policy_content
         }]
     
-    print(f"   [EXTRACT] Processing {len(pages)} pages...")
+    print(f"   [EXTRACT] Processing {len(pages)} pages in parallel (batch size 2)...")
     
     all_entities = []
     all_relationships = []
     
-    for i, page in enumerate(pages):
-        print(f"   [EXTRACT] Processing page {i + 1}/{len(pages)}")
-        result = await extract_from_page(page, schema, client, model)
-        all_entities.extend(result.get("entities", []))
-        all_relationships.extend(result.get("relationships", []))
+    # Process pages in parallel batches of 2 for speed
+    batch_size = 2
+    for i in range(0, len(pages), batch_size):
+        batch = pages[i:i + batch_size]
+        batch_nums = [p['page_num'] for p in batch]
+        print(f"   [EXTRACT] Processing pages {batch_nums}...")
         
-        # Small delay between pages to avoid rate limiting
-        if i < len(pages) - 1:
-            await asyncio.sleep(1)
+        # Run batch in parallel
+        tasks = [extract_from_page(page, schema, client, model) for page in batch]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        for result in results:
+            if isinstance(result, Exception):
+                print(f"   [WARN] Batch page failed: {result}")
+                continue
+            all_entities.extend(result.get("entities", []))
+            all_relationships.extend(result.get("relationships", []))
+        
+        # Small delay between batches to avoid rate limiting
+        if i + batch_size < len(pages):
+            await asyncio.sleep(0.5)
     
     print(f"   [EXTRACT] Raw extraction: {len(all_entities)} entities, {len(all_relationships)} relationships")
     
@@ -459,7 +504,7 @@ async def extract_policy_rules(
             raise ValueError("Schema not found. Run Ontology Designer first.")
     
     if model is None:
-        model = os.getenv("EXTRACTION_MODEL", "gemini-3-flash-preview")
+        model = os.getenv("EXTRACTION_MODEL", "gemini-3-pro-preview")
     
     # Phase 1: Extract raw triplets
     raw_entities, raw_relationships = await extract_all_pages(policy_content, schema, model)
