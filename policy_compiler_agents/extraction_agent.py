@@ -189,7 +189,7 @@ async def extract_from_page(
                     contents=prompt,
                     config=types.GenerateContentConfig(
                         system_instruction=PAGE_EXTRACTION_PROMPT,
-                        temperature=0.0,
+                        temperature=1.0,  # Gemini 3 default - optimized for reasoning
                         response_mime_type="application/json",
                         response_schema=EXTRACTION_RESPONSE_SCHEMA,  # Gemini 3: Schema enforcement
                         thinking_config=ThinkingConfig(

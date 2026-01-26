@@ -4,16 +4,71 @@ Critic Agent - Validates schema and extraction quality before graph construction
 
 This agent performs quality checks on the proposed schema and extracted Cypher
 statements to ensure they are correct and complete before building the graph.
+
+Gemini 3 Features Used:
+- ThinkingConfig (high level) - Deep reasoning for thorough validation
+- response_schema - Structured output enforcement
+- response_mime_type - JSON mode
+- system_instruction - Separated from user prompt
 """
 
 import json
+import os
 import re
 from typing import Any, Dict, List
 
-from google import genai
 from google.genai import types
+from google.genai.types import ThinkingConfig, Schema
 
 from .tools import get_gemini_client, load_artifact, save_artifact
+
+
+# =============================================================================
+# GEMINI 3 SCHEMA ENFORCEMENT
+# =============================================================================
+
+SCHEMA_ISSUE_SCHEMA = Schema(
+    type="object",
+    properties={
+        "issue": Schema(type="string", description="Description of the issue"),
+        "severity": Schema(type="string", description="error or warning"),
+        "fix": Schema(type="string", description="Suggested fix"),
+    },
+    required=["issue", "severity"]
+)
+
+CYPHER_ISSUE_SCHEMA = Schema(
+    type="object",
+    properties={
+        "issue": Schema(type="string", description="Description of the issue"),
+        "statement_index": Schema(type="integer", description="Index of problematic statement"),
+        "severity": Schema(type="string", description="error or warning"),
+        "fix": Schema(type="string", description="Suggested fix"),
+    },
+    required=["issue", "severity"]
+)
+
+COVERAGE_ISSUE_SCHEMA = Schema(
+    type="object",
+    properties={
+        "missing": Schema(type="string", description="What is missing"),
+        "recommendation": Schema(type="string", description="How to fix"),
+    },
+    required=["missing", "recommendation"]
+)
+
+VALIDATION_RESPONSE_SCHEMA = Schema(
+    type="object",
+    properties={
+        "validation_status": Schema(type="string", description="approved or needs_revision"),
+        "schema_issues": Schema(type="array", items=SCHEMA_ISSUE_SCHEMA, description="Schema issues found"),
+        "cypher_issues": Schema(type="array", items=CYPHER_ISSUE_SCHEMA, description="Cypher issues found"),
+        "coverage_issues": Schema(type="array", items=COVERAGE_ISSUE_SCHEMA, description="Coverage gaps"),
+        "summary": Schema(type="string", description="Overall assessment"),
+        "confidence_score": Schema(type="number", description="Confidence score 0.0-1.0"),
+    },
+    required=["validation_status", "summary", "confidence_score"]
+)
 
 CRITIC_SYSTEM_PROMPT = """You are a Quality Assurance Specialist for knowledge graph construction.
 Your task is to validate schema designs and Cypher statements for correctness and completeness.
@@ -59,10 +114,15 @@ Be thorough but practical. Minor warnings should not block approval."""
 async def validate_artifacts(
     schema: Dict[str, Any] = None,
     extraction: Dict[str, Any] = None,
-    model: str = "gemini-3-flash-preview"
+    model: str = "gemini-3-pro-preview"
 ) -> Dict[str, Any]:
     """
-    Validate the schema and extraction artifacts.
+    Validate the schema and extraction artifacts using Gemini 3's Thinking Mode.
+    
+    Gemini 3 Features:
+    - ThinkingConfig(thinking_level="high") for thorough validation
+    - response_schema for structured output enforcement
+    - response_mime_type="application/json" for JSON mode
     
     Args:
         schema: Schema from Ontology Designer
@@ -95,6 +155,9 @@ async def validate_artifacts(
                 "coverage_issues": [],
             }
     
+    # Use environment variable override if set
+    model = os.getenv("CRITIC_MODEL", model)
+    
     # Perform local validation checks first
     local_issues = perform_local_validation(schema, extraction)
     
@@ -126,26 +189,41 @@ EXTRACTION SUMMARY:
 
 Perform comprehensive validation and provide your assessment."""
 
+    print("[CRITIC] Using Gemini 3 Thinking Mode (high) for thorough validation...")
+    
     response = await client.aio.models.generate_content(
         model=model,
         contents=prompt,
         config=types.GenerateContentConfig(
             system_instruction=CRITIC_SYSTEM_PROMPT,
-            temperature=0.1,
+            temperature=1.0,  # Gemini 3 default - optimized for reasoning
             response_mime_type="application/json",
+            response_schema=VALIDATION_RESPONSE_SCHEMA,  # Gemini 3: Schema enforcement
+            thinking_config=ThinkingConfig(
+                thinking_level="high"  # Gemini 3: Deep reasoning for thorough validation
+            ),
         ),
     )
     
+    # Extract response text (handle thinking mode response structure)
+    response_text = response.text
+    if hasattr(response, 'candidates') and response.candidates:
+        for part in response.candidates[0].content.parts:
+            if hasattr(part, 'text') and not (hasattr(part, 'thought') and part.thought):
+                response_text = part.text
+                break
+    
     try:
-        validation = json.loads(response.text)
+        validation = json.loads(response_text)
     except json.JSONDecodeError:
-        json_match = re.search(r'\{.*\}', response.text, re.DOTALL)
+        json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
         if json_match:
             validation = json.loads(json_match.group())
         else:
             validation = {
                 "validation_status": "needs_revision",
                 "summary": "Could not parse validation response",
+                "confidence_score": 0.0,
             }
     
     # Merge local issues
