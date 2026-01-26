@@ -8,6 +8,12 @@ This agent:
 3.  Queries Neo4j for applicable rules.
 4.  Applies logic to decide (Approve/Deny).
 
+Gemini 3 Features Used:
+- ThinkingConfig (high level) - Deep reasoning for accurate category/condition matching
+- response_schema - Structured output enforcement
+- response_mime_type - JSON mode
+- system_instruction - Separated from user prompt
+
 NOTE: All required data (membership_tier, delivered_at, seller_type) 
       should already be present in the verified_order.json from client.py.
       No Cloud SQL connection is needed here.
@@ -20,14 +26,36 @@ import asyncio
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from google import genai
 from google.genai import types
+from google.genai.types import ThinkingConfig, Schema
 
 # Add project root to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from neo4j_graph_engine.db import execute_query as query_graph
 from .tools import get_gemini_client
+
+
+# =============================================================================
+# GEMINI 3 SCHEMA ENFORCEMENT
+# =============================================================================
+
+CATEGORY_MATCH_SCHEMA = Schema(
+    type="object",
+    properties={
+        "matched_category": Schema(type="string", description="The matched category from the valid list"),
+        "confidence": Schema(type="number", description="Confidence score 0.0-1.0"),
+    },
+    required=["matched_category"]
+)
+
+CONDITION_MATCH_SCHEMA = Schema(
+    type="object",
+    properties={
+        "matched_condition": Schema(type="string", description="The matched condition from the valid list, or NO_MATCH"),
+    },
+    required=["matched_condition"]
+)
 
 
 # Condition normalization map - maps enum values to semantic aliases
@@ -46,30 +74,76 @@ def normalize_condition_static(condition: str) -> list:
     return [condition.lower().replace("_", " ")]
 
 class Adjudicator:
-    def __init__(self, model: str = "gemini-2.5-flash"):
-        self.model = model
+    """
+    The Adjudicator Agent - makes return policy decisions using:
+    - Neo4j Knowledge Graph for policy rules
+    - Gemini 3 Thinking Mode for accurate category/condition matching
+    - Deterministic Python logic for final decisions
+    """
+    
+    def __init__(self, model: str = "gemini-3-pro-preview"):
+        self.model = os.getenv("ADJUDICATOR_MODEL", model)
         self.client = get_gemini_client()
         self.schema_cache = {
             "categories": [],
             "tiers": [],
-            "conditions": [],  # Added for condition normalization
+            "conditions": [],
             "relationship_types": []
         }
 
-    async def generate_with_retry(self, prompt: str, max_retries: int = 5) -> Any:
+    async def generate_with_retry(
+        self, 
+        prompt: str, 
+        system_instruction: str = None,
+        response_schema: Schema = None,
+        max_retries: int = 5
+    ) -> Any:
         """
-        Helper to call Gemini with exponential backoff for 429 errors.
+        Helper to call Gemini 3 with Thinking Mode and exponential backoff.
+        
+        Gemini 3 Features:
+        - ThinkingConfig(thinking_level="high") for accurate matching
+        - response_schema for structured output enforcement
+        - temperature=1.0 (Gemini 3 default for reasoning)
         """
         import time
         base_delay = 2
+        
+        config_kwargs = {
+            "temperature": 1.0,  # Gemini 3 default - optimized for reasoning
+            "thinking_config": ThinkingConfig(
+                thinking_level="high"  # Deep reasoning for accurate matching
+            ),
+        }
+        
+        if system_instruction:
+            config_kwargs["system_instruction"] = system_instruction
+        
+        if response_schema:
+            config_kwargs["response_mime_type"] = "application/json"
+            config_kwargs["response_schema"] = response_schema
         
         for attempt in range(max_retries):
             try:
                 resp = await self.client.aio.models.generate_content(
                     model=self.model,
-                    contents=prompt
+                    contents=prompt,
+                    config=types.GenerateContentConfig(**config_kwargs)
                 )
+                
+                # Extract response text (handle thinking mode response structure)
+                response_text = resp.text
+                if hasattr(resp, 'candidates') and resp.candidates:
+                    for part in resp.candidates[0].content.parts:
+                        if hasattr(part, 'text') and not (hasattr(part, 'thought') and part.thought):
+                            response_text = part.text
+                            break
+                
+                # Return parsed JSON if schema was used, otherwise raw response
+                if response_schema:
+                    return json.loads(response_text)
                 return resp
+                
             except Exception as e:
                 error_str = str(e)
                 if "429" in error_str or "quota" in error_str.lower():
@@ -124,45 +198,47 @@ class Adjudicator:
                     print(f"   [CONDITION] Static match: '{item_condition}' -> '{gc}'")
                     return gc
         
-        # Step 2: LLM fallback
+        # Step 2: LLM fallback with Gemini 3 schema enforcement
         if graph_conditions:
-            print(f"   [CONDITION] No static match for '{item_condition}', trying LLM...")
+            print(f"   [CONDITION] No static match for '{item_condition}', using Gemini 3 Thinking Mode...")
             
-            prompt = f"""You are a Condition Matcher for a return policy system.
-
-TASK: Match the customer's item condition to the closest policy condition.
+            system_instruction = """You are a Condition Matcher for a return policy system.
+Match the customer's item condition to the closest policy condition.
+- "DAMAGED_DEFECTIVE" means the same as "damaged", "defective", "broken".
+- "NEW_UNOPENED" means the same as "new", "sealed", "factory sealed".
+- If no good match exists, use "NO_MATCH" as the matched_condition."""
+            
+            prompt = f"""Match this customer item condition to a policy condition.
 
 Customer's Item Condition: "{item_condition}"
 Valid Policy Conditions: {graph_conditions}
 
-INSTRUCTIONS:
-- Find the condition from the list that is semantically closest to the customer's condition.
-- "DAMAGED_DEFECTIVE" means the same as "damaged", "defective", "broken".
-- "NEW_UNOPENED" means the same as "new", "sealed", "factory sealed".
-- If no good match, reply with "NO_MATCH".
-
-OUTPUT: Reply with ONLY the matching condition name from the list, nothing else."""
+Find the semantically closest match from the valid list."""
 
             try:
-                resp = await self.generate_with_retry(prompt)
-                result = resp.text.strip().strip('"').strip("'")
+                result = await self.generate_with_retry(
+                    prompt,
+                    system_instruction=system_instruction,
+                    response_schema=CONDITION_MATCH_SCHEMA
+                )
+                matched = result.get("matched_condition", "NO_MATCH")
                 
-                if result in graph_conditions:
-                    print(f"   [CONDITION] LLM match: '{item_condition}' -> '{result}'")
-                    return result
+                if matched in graph_conditions:
+                    print(f"   [CONDITION] Gemini 3 match: '{item_condition}' -> '{matched}'")
+                    return matched
                 
-                if result == "NO_MATCH":
-                    print(f"   [CONDITION] LLM returned NO_MATCH")
+                if matched == "NO_MATCH":
+                    print(f"   [CONDITION] Gemini 3 returned NO_MATCH")
                     return item_condition
                     
-                # Try partial match on LLM result
+                # Try partial match on result
                 for gc in graph_conditions:
-                    if gc.lower() in result.lower() or result.lower() in gc.lower():
-                        print(f"   [CONDITION] LLM partial match: '{item_condition}' -> '{gc}'")
+                    if gc.lower() in matched.lower() or matched.lower() in gc.lower():
+                        print(f"   [CONDITION] Gemini 3 partial match: '{item_condition}' -> '{gc}'")
                         return gc
                         
             except Exception as e:
-                print(f"   [WARN] LLM condition matching failed: {e}")
+                print(f"   [WARN] Gemini 3 condition matching failed: {e}")
         
         # No match found
         print(f"   [CONDITION] No match found for '{item_condition}'")
@@ -232,10 +308,12 @@ OUTPUT: Reply with ONLY the matching condition name from the list, nothing else.
         if fuzzy_result:
             return fuzzy_result
         
-        # Fallback to LLM
-        prompt = f"""You are a Product Category Mapper.
-
-TASK: Map this item to ONE category from the list below.
+        # Fallback to LLM with Gemini 3 schema enforcement
+        system_instruction = """You are a Product Category Mapper for a retail return policy system.
+Map items to valid product categories. You MUST return exactly one category from the provided list.
+Do not invent new categories. Pick the closest semantic match."""
+        
+        prompt = f"""Map this item to ONE category from the valid list.
 
 ITEM:
 - Name: {item_name}
@@ -243,27 +321,29 @@ ITEM:
 - Subcategory: {item_subcategory}
 
 VALID CATEGORIES:
-{json.dumps(valid_cats[:30])}  
+{json.dumps(valid_cats[:30])}
 
-CRITICAL: You MUST return EXACTLY one of the categories from the list above.
-Do not invent new categories. If unsure, pick the closest match.
-
-OUTPUT: Just the category name, nothing else."""
+Pick the closest matching category from the list."""
 
         try:
-            resp = await self.generate_with_retry(prompt)
-            mapped_cat = resp.text.strip().strip('"').strip("'")
+            result = await self.generate_with_retry(
+                prompt,
+                system_instruction=system_instruction,
+                response_schema=CATEGORY_MATCH_SCHEMA
+            )
+            mapped_cat = result.get("matched_category", "")
             
             # Validate it's in the list
             if mapped_cat in valid_cats:
+                print(f"   [MAPPER] Gemini 3 matched: '{item_category}' -> '{mapped_cat}'")
                 return mapped_cat
             
-            # Try fuzzy match on LLM response
+            # Try fuzzy match on result
             fuzzy_result = self._fuzzy_match_category(mapped_cat, valid_cats)
             if fuzzy_result:
                 return fuzzy_result
                 
-            print(f"   [WARN] LLM returned invalid category '{mapped_cat}', using 'General Products'.")
+            print(f"   [WARN] Gemini 3 returned invalid category '{mapped_cat}', using 'General Products'.")
             return "General Products" if "General Products" in valid_cats else valid_cats[0]
         except Exception as e:
             print(f"   [WARN] Category mapping failed: {e}")
@@ -516,7 +596,75 @@ OUTPUT: Just the category name, nothing else."""
         return context
 
     # =========================================================================
-    # COMPONENT 6: Main Orchestrator
+    # COMPONENT 6: Reasoning Trace Generator (Gemini 3 Thinking Mode)
+    # =========================================================================
+    async def _generate_reasoning_trace(
+        self, 
+        context: Dict[str, Any], 
+        rules: List[Dict[str, Any]], 
+        decision: Dict[str, Any]
+    ) -> str:
+        """
+        Generate a customer-friendly explanation of the decision using Gemini 3 Thinking Mode.
+        
+        This is the key differentiator - showing customers WHY a decision was made,
+        not just WHAT the decision is.
+        """
+        # Build concise context for explanation
+        decision_type = decision.get("decision", "UNKNOWN")
+        reason = decision.get("reason", "")
+        days_since = context.get("days_since_delivery", 0)
+        category = context.get("mapped_category", "General")
+        condition = context.get("item_condition", "UNKNOWN")
+        
+        rule_info = ""
+        if rules:
+            rule = rules[0]
+            rule_info = f"Policy: {rule.get('rule_name', 'Standard Policy')}, {rule.get('days_allowed', 'N/A')} days allowed"
+        
+        system_instruction = """You are a friendly customer service assistant explaining return policy decisions.
+Write a brief, empathetic explanation (2-3 sentences) that:
+1. Acknowledges the customer's request
+2. Explains the key factor in the decision
+3. If denied, offers any alternatives or next steps
+
+Be concise and helpful. Do not use technical jargon."""
+
+        prompt = f"""Explain this return decision to a customer:
+
+Decision: {decision_type}
+Reason: {reason}
+Item Category: {category}
+Days Since Delivery: {days_since}
+Item Condition: {condition}
+{rule_info}
+
+Write a brief, customer-friendly explanation."""
+
+        try:
+            # Use Gemini 3 Thinking Mode for thoughtful explanation
+            resp = await self.client.aio.models.generate_content(
+                model=self.model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_instruction,
+                    temperature=1.0,
+                    thinking_config=ThinkingConfig(thinking_level="medium"),  # Medium for speed
+                )
+            )
+            
+            # Extract the response text (not the thinking trace)
+            explanation = resp.text.strip()
+            print(f"   [REASONING] Generated customer explanation")
+            return explanation
+            
+        except Exception as e:
+            print(f"   [WARN] Reasoning trace generation failed: {e}")
+            # Fallback to the technical reason
+            return reason
+
+    # =========================================================================
+    # COMPONENT 7: Main Orchestrator
     # =========================================================================
     async def adjudicate(self, verified_order: Dict[str, Any], user_request: Dict[str, Any] = None) -> Dict[str, Any]:
         """
@@ -568,10 +716,14 @@ OUTPUT: Just the category name, nothing else."""
         decision = self.make_decision(context, rules)
         print(f"   [DECISION] {decision['decision']}: {decision['reason']}")
         
-        # 6. Build final output
+        # 6. Generate reasoning trace using Gemini 3 Thinking Mode
+        reasoning_trace = await self._generate_reasoning_trace(context, rules, decision)
+        
+        # 7. Build final output
         output = {
             "order_id": context["order_id"],
             "decision": decision["decision"],
+            "reasoning_trace": reasoning_trace,  # Gemini 3: Explainable decision
             "details": {
                 "reason": decision["reason"],
                 "restocking_fee_percent": decision.get("restocking_fee_percent", 0),
