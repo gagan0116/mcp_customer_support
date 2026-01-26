@@ -45,17 +45,22 @@ OUTPUT FORMAT - Return valid JSON:
 {
   "entities": [
     {
-      "label": "ReturnRule",
+      "label": "ReturnWindow",
       "properties": {"name": "15 Day Return Period", "days_allowed": 15},
       "text_excerpt": "15 days"
+    },
+    {
+      "label": "ProductCategory",
+      "properties": {"name": "Activatable Devices"},
+      "text_excerpt": "activatable devices"
     }
   ],
   "relationships": [
     {
       "from_label": "ProductCategory",
-      "from_name": "Laptops",
-      "type": "HAS_RETURN_RULE",
-      "to_label": "ReturnRule", 
+      "from_name": "Activatable Devices",
+      "type": "HAS_RETURN_WINDOW",
+      "to_label": "ReturnWindow", 
       "to_name": "15 Day Return Period"
     }
   ]
@@ -67,9 +72,9 @@ CRITICAL RULES:
    - GOOD: Entity name="15 Day Rule", Relationship to_name="15 Day Rule"
 2. Extract ALL entities mentioned on this page.
 3. Include text_excerpt - the exact phrase from the document (for citation).
-4. Use schema node types provided.
+4. Use ONLY schema node types and relationship types provided in the user prompt.
 5. Only output valid JSON.
-6. EXHAUSTIVE EXTRACTION: Extract ALL relationships implied by the text. Missing a relationship is worse. When in doubt, extract it."""
+6. EXHAUSTIVE EXTRACTION: Extract ALL relationships implied by the text."""
 
 
 def split_by_page_markers(markdown: str) -> List[Dict[str, Any]]:
@@ -160,7 +165,7 @@ async def extract_from_page(
                         system_instruction=PAGE_EXTRACTION_PROMPT,
                         response_mime_type="application/json",
                         thinking_config=ThinkingConfig(
-                            thinking_level="high"
+                            thinking_level="medium"
                         ),
                     ),
                 ),
@@ -219,20 +224,32 @@ async def extract_all_pages(
             "content": policy_content
         }]
     
-    print(f"   [EXTRACT] Processing {len(pages)} pages...")
+    print(f"   [EXTRACT] Processing {len(pages)} pages in parallel (batch size 2)...")
     
     all_entities = []
     all_relationships = []
     
-    for i, page in enumerate(pages):
-        print(f"   [EXTRACT] Processing page {i + 1}/{len(pages)}")
-        result = await extract_from_page(page, schema, client, model)
-        all_entities.extend(result.get("entities", []))
-        all_relationships.extend(result.get("relationships", []))
+    # Process pages in parallel batches of 2 for speed
+    batch_size = 2
+    for i in range(0, len(pages), batch_size):
+        batch = pages[i:i + batch_size]
+        batch_nums = [p['page_num'] for p in batch]
+        print(f"   [EXTRACT] Processing pages {batch_nums}...")
         
-        # Small delay between pages to avoid rate limiting
-        if i < len(pages) - 1:
-            await asyncio.sleep(1)
+        # Run batch in parallel
+        tasks = [extract_from_page(page, schema, client, model) for page in batch]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        for result in results:
+            if isinstance(result, Exception):
+                print(f"   [WARN] Batch page failed: {result}")
+                continue
+            all_entities.extend(result.get("entities", []))
+            all_relationships.extend(result.get("relationships", []))
+        
+        # Small delay between batches to avoid rate limiting
+        if i + batch_size < len(pages):
+            await asyncio.sleep(0.5)
     
     print(f"   [EXTRACT] Raw extraction: {len(all_entities)} entities, {len(all_relationships)} relationships")
     

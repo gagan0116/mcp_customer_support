@@ -74,7 +74,7 @@ ONTOLOGY_SYSTEM_PROMPT = """You are a Neo4j Schema Designer for retail policy do
 
 CRITICAL RULES:
 1. Every node MUST have a 'name' property (string, required) in addition to 'source_citation'. This ensures every entity is identifiable.
-2. Use PascalCase for node labels (e.g., ReturnRule), UPPER_SNAKE_CASE for relationships (e.g., HAS_RETURN_RULE).
+2. Use PascalCase for node labels (e.g., ReturnWindow), UPPER_SNAKE_CASE for relationships (e.g., HAS_RETURN_WINDOW).
 3. Model conditional logic with explicit condition nodes linked via REQUIRES or EXCLUDES relationships.
 4. Include constraint types where appropriate (UNIQUE, NOT NULL).
 5. The 'from_label' and 'to_label' in relationships MUST EXACTLY MATCH a 'label' defined in the 'nodes' array. No spelling variations or plurals.
@@ -95,25 +95,25 @@ DOMAIN EXAMPLE:
       "constraints": ["UNIQUE(name)"]
     },
     {
-      "label": "ReturnRule",
-      "description": "A rule specifying return window and conditions",
+      "label": "ReturnWindow",
+      "description": "Time period allowed for returns",
       "properties": [
         {"name": "name", "type": "string", "required": true},
-        {"name": "days_allowed", "type": "integer", "required": false},
+        {"name": "days_allowed", "type": "integer", "required": true},
         {"name": "source_citation", "type": "string", "required": true}
       ]
     }
   ],
   "relationships": [
     {
-      "type": "HAS_RETURN_RULE",
+      "type": "HAS_RETURN_WINDOW",
       "from_label": "ProductCategory",
-      "to_label": "ReturnRule",
-      "description": "Links a category to its applicable return rule",
+      "to_label": "ReturnWindow",
+      "description": "Links a category to its applicable return window",
       "cardinality": "1:N"
     }
   ],
-  "design_rationale": "Categories link to rules; membership tiers can override via OVERRIDES relationship."
+  "design_rationale": "Categories link to return windows; membership tiers can extend via APPLIES_TO_MEMBERSHIP relationship."
 }
 
 Think carefully through the entire document to identify:
