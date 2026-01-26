@@ -181,11 +181,10 @@ Remember: Every node type MUST include 'name' and 'source_citation' properties."
         contents=prompt,
         config=types.GenerateContentConfig(
             system_instruction=ONTOLOGY_SYSTEM_PROMPT,
-            temperature=1.0,  # Gemini 3 default - optimized for reasoning
             response_mime_type="application/json",
-            response_schema=ONTOLOGY_RESPONSE_SCHEMA,  # Gemini 3: Schema enforcement
+            response_schema=ONTOLOGY_RESPONSE_SCHEMA,
             thinking_config=ThinkingConfig(
-                thinking_level="high"  # Gemini 3: Deep reasoning for exhaustive extraction
+                thinking_level="high"
             ),
         ),
     )

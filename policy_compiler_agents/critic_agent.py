@@ -196,11 +196,10 @@ Perform comprehensive validation and provide your assessment."""
         contents=prompt,
         config=types.GenerateContentConfig(
             system_instruction=CRITIC_SYSTEM_PROMPT,
-            temperature=1.0,  # Gemini 3 default - optimized for reasoning
             response_mime_type="application/json",
-            response_schema=VALIDATION_RESPONSE_SCHEMA,  # Gemini 3: Schema enforcement
+            response_schema=VALIDATION_RESPONSE_SCHEMA,
             thinking_config=ThinkingConfig(
-                thinking_level="high"  # Gemini 3: Deep reasoning for thorough validation
+                thinking_level="high"
             ),
         ),
     )

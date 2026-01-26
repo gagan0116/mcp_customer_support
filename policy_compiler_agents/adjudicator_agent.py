@@ -110,9 +110,8 @@ class Adjudicator:
         base_delay = 2
         
         config_kwargs = {
-            "temperature": 1.0,  # Gemini 3 default - optimized for reasoning
             "thinking_config": ThinkingConfig(
-                thinking_level="high"  # Deep reasoning for accurate matching
+                thinking_level="high"
             ),
         }
         
@@ -648,8 +647,7 @@ Write a brief, customer-friendly explanation."""
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     system_instruction=system_instruction,
-                    temperature=1.0,
-                    thinking_config=ThinkingConfig(thinking_level="medium"),  # Medium for speed
+                    thinking_config=ThinkingConfig(thinking_level="medium"),
                 )
             )
             

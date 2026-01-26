@@ -34,43 +34,10 @@ from .tools import (
 
 
 # =============================================================================
-# GEMINI 3 SCHEMA ENFORCEMENT
-# =============================================================================
-
-ENTITY_SCHEMA = Schema(
-    type="object",
-    properties={
-        "label": Schema(type="string", description="Node label from schema"),
-        "properties": Schema(type="object", description="Entity properties including 'name'"),
-        "text_excerpt": Schema(type="string", description="Exact phrase from document for citation"),
-    },
-    required=["label", "properties"]
-)
-
-RELATIONSHIP_EXTRACT_SCHEMA = Schema(
-    type="object",
-    properties={
-        "from_label": Schema(type="string", description="Source node label"),
-        "from_name": Schema(type="string", description="Source entity name - must match entity name exactly"),
-        "type": Schema(type="string", description="Relationship type in UPPER_SNAKE_CASE"),
-        "to_label": Schema(type="string", description="Target node label"),
-        "to_name": Schema(type="string", description="Target entity name - must match entity name exactly"),
-    },
-    required=["from_label", "from_name", "type", "to_label", "to_name"]
-)
-
-EXTRACTION_RESPONSE_SCHEMA = Schema(
-    type="object",
-    properties={
-        "entities": Schema(type="array", items=ENTITY_SCHEMA, description="List of extracted entities"),
-        "relationships": Schema(type="array", items=RELATIONSHIP_EXTRACT_SCHEMA, description="List of extracted relationships"),
-    },
-    required=["entities", "relationships"]
-)
-
-# =============================================================================
 # PHASE 1: TRIPLET EXTRACTOR (LLM)
 # =============================================================================
+# NOTE: response_schema is not used for extraction because entity properties
+# are dynamic (different for each node type). Using JSON mode only.
 
 PAGE_EXTRACTION_PROMPT = """You are a Legal Knowledge Extractor. Extract entities and relationships from this policy page.
 
@@ -183,17 +150,17 @@ async def extract_from_page(
     for attempt in range(max_retries):
         try:
             # Wrap API call with timeout (increased for thinking mode)
+            # NOTE: response_schema not used here because entity properties are dynamic
+            # (different properties for different node types). Using JSON mode only.
             response = await asyncio.wait_for(
                 client.aio.models.generate_content(
                     model=model,
                     contents=prompt,
                     config=types.GenerateContentConfig(
                         system_instruction=PAGE_EXTRACTION_PROMPT,
-                        temperature=1.0,  # Gemini 3 default - optimized for reasoning
                         response_mime_type="application/json",
-                        response_schema=EXTRACTION_RESPONSE_SCHEMA,  # Gemini 3: Schema enforcement
                         thinking_config=ThinkingConfig(
-                            thinking_level="high"  # Gemini 3: Deep reasoning for exhaustive extraction
+                            thinking_level="high"
                         ),
                     ),
                 ),
