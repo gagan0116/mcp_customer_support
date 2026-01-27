@@ -23,6 +23,10 @@ from .builder_agent import run_builder_agent, build_graph
 from .tools import save_artifact, read_policy_markdown
 
 
+# Type for log callback
+LogCallback = Optional[callable]
+
+
 class PolicyCompilerPipeline:
     """
     Sequential pipeline orchestrator for policy compilation.
@@ -30,15 +34,17 @@ class PolicyCompilerPipeline:
     Implements Google ADK-style agent coordination with shared state.
     """
     
-    def __init__(self, max_revision_attempts: int = 2):
+    def __init__(self, max_revision_attempts: int = 2, log_callback: LogCallback = None):
         """
         Initialize the pipeline.
         
         Args:
             max_revision_attempts: Maximum times to retry after critic rejection
+            log_callback: Optional callback function for progress logging (receives message string)
         """
         self.max_revision_attempts = max_revision_attempts
         self.state: Dict[str, Any] = {}
+        self._log = log_callback or (lambda msg: print(msg))
     
     async def run(self, clear_existing_graph: bool = True) -> Dict[str, Any]:
         """
@@ -50,9 +56,9 @@ class PolicyCompilerPipeline:
         Returns:
             Pipeline execution results
         """
-        print("=" * 60)
-        print("[PIPELINE] POLICY COMPILER PIPELINE - Starting")
-        print("=" * 60)
+        self._log("="*60)
+        self._log("[PIPELINE] POLICY COMPILER PIPELINE - Starting")
+        self._log("="*60)
         
         results = {
             "pipeline_status": "running",
@@ -61,64 +67,72 @@ class PolicyCompilerPipeline:
         
         try:
             # Stage 1: Ontology Design
-            print("\n[STAGE 1/4] Ontology Design")
-            print("-" * 40)
-            ontology_result = await run_ontology_agent()
+            self._log("[STAGE 1/4] Ontology Design - Analyzing policy structure...")
+            self._log("Using Gemini Thinking Mode for schema generation...")
+            ontology_result = await run_ontology_agent(log_callback=self._log)
             results["stages"]["ontology"] = ontology_result
             
             if ontology_result["status"] != "success":
                 return self._fail_pipeline(results, "Ontology design failed")
             
+            node_count = len(ontology_result.get("schema", {}).get("nodes", []))
+            rel_count = len(ontology_result.get("schema", {}).get("relationships", []))
+            self._log(f"[ONTOLOGY] Designed schema: {node_count} node types, {rel_count} relationships")
             self.state["schema"] = ontology_result["schema"]
             
             # Stage 2: Extraction
-            print("\n[STAGE 2/4] Policy Extraction")
-            print("-" * 40)
-            extraction_result = await run_extraction_agent(schema=self.state["schema"])
+            self._log("[STAGE 2/4] Policy Extraction - Extracting entities & relationships...")
+            self._log("Processing pages in parallel batches...")
+            extraction_result = await run_extraction_agent(schema=self.state["schema"], log_callback=self._log)
             results["stages"]["extraction"] = extraction_result
             
             if extraction_result["status"] != "success":
                 return self._fail_pipeline(results, "Extraction failed")
             
+            stmt_count = len(extraction_result.get("extraction", {}).get("cypher_statements", []))
+            self._log(f"[EXTRACTION] Generated {stmt_count} Cypher statements")
             self.state["extraction"] = extraction_result["extraction"]
             
             # Stage 3: Critic Validation (with retry loop)
-            print("\n[STAGE 3/4] Validation")
-            print("-" * 40)
+            self._log("[STAGE 3/4] Validation - Checking schema & extraction quality...")
             
             approved = False
             for attempt in range(self.max_revision_attempts + 1):
+                self._log(f"[CRITIC] Validation attempt {attempt + 1}/{self.max_revision_attempts + 1}...")
                 critic_result = await run_critic_agent(
                     schema=self.state["schema"],
-                    extraction=self.state["extraction"]
+                    extraction=self.state["extraction"],
+                    log_callback=self._log
                 )
                 results["stages"][f"validation_attempt_{attempt + 1}"] = critic_result
                 
                 if critic_result.get("approved", False):
                     approved = True
-                    print(f"   [OK] Approved on attempt {attempt + 1}")
+                    self._log(f"[CRITIC] ✓ Approved on attempt {attempt + 1}")
                     break
                 else:
                     if attempt < self.max_revision_attempts:
-                        print(f"   [WARN] Revision needed, attempting re-extraction...")
+                        self._log(f"[CRITIC] Revision needed, re-running extraction...")
                         # Re-run extraction with critic feedback
                         extraction_result = await run_extraction_agent(
-                            schema=self.state["schema"]
+                            schema=self.state["schema"],
+                            log_callback=self._log
                         )
                         if extraction_result["status"] == "success":
                             self.state["extraction"] = extraction_result["extraction"]
             
             if not approved:
-                print("   [WARN] Proceeding despite validation issues (max attempts reached)")
+                self._log("[CRITIC] ⚠ Proceeding despite validation issues (max attempts reached)")
             
             self.state["validation"] = critic_result.get("validation", {})
             
             # Stage 4: Graph Building
-            print("\n[STAGE 4/4] Graph Construction")
-            print("-" * 40)
+            self._log("[STAGE 4/4] Graph Construction - Building Neo4j knowledge graph...")
+            self._log("Connecting to Neo4j and executing Cypher statements...")
             builder_result = await run_builder_agent(
                 extraction=self.state["extraction"],
-                clear_existing=clear_existing_graph
+                clear_existing=clear_existing_graph,
+                log_callback=self._log
             )
             results["stages"]["builder"] = builder_result
             
@@ -134,12 +148,12 @@ class PolicyCompilerPipeline:
                 "graph_nodes": builder_result.get("build_result", {}).get("verification", {}).get("total_nodes", 0),
             }
             
-            print("\n" + "=" * 60)
-            print("[PIPELINE] COMPLETE - Knowledge graph built successfully!")
-            print("=" * 60)
-            print(f"   Schema: {results['final_state']['schema_nodes']} node types")
-            print(f"   Cypher: {results['final_state']['cypher_statements']} statements")
-            print(f"   Graph: {results['final_state']['graph_nodes']} nodes created")
+            self._log("="*60)
+            self._log("[PIPELINE] ✓ COMPLETE - Knowledge graph built successfully!")
+            self._log("="*60)
+            self._log(f"Schema: {results['final_state']['schema_nodes']} node types")
+            self._log(f"Cypher: {results['final_state']['cypher_statements']} statements")
+            self._log(f"Graph: {results['final_state']['graph_nodes']} nodes created")
             
             # Save final results
             save_artifact("pipeline_results", results)
@@ -153,7 +167,7 @@ class PolicyCompilerPipeline:
         """Mark pipeline as failed."""
         results["pipeline_status"] = "failed"
         results["error"] = error
-        print(f"\n[PIPELINE] FAILED: {error}")
+        self._log(f"[PIPELINE] ✗ FAILED: {error}")
         save_artifact("pipeline_results", results)
         return results
 

@@ -304,13 +304,21 @@ def perform_local_validation(
 
 async def run_critic_agent(
     schema: Dict[str, Any] = None,
-    extraction: Dict[str, Any] = None
+    extraction: Dict[str, Any] = None,
+    log_callback: callable = None
 ) -> Dict[str, Any]:
     """
     Main entry point for the Critic agent.
     Validates schema and extraction, returns approval status.
+    
+    Args:
+        schema: The schema from Ontology Agent
+        extraction: The extraction from Extraction Agent
+        log_callback: Optional callback for progress logging
     """
-    print("[CRITIC] Validating schema and extraction...")
+    log = log_callback or (lambda msg: print(msg))
+    
+    log("[CRITIC] Validating schema and extraction...")
     
     try:
         validation = await validate_artifacts(schema=schema, extraction=extraction)
@@ -319,16 +327,14 @@ async def run_critic_agent(
         confidence = validation.get("confidence_score", 0)
         
         if status == "approved":
-            print(f"[CRITIC] Validation APPROVED (confidence: {confidence:.1%})")
+            log(f"[CRITIC] ✓ Validation APPROVED (confidence: {confidence:.1%})")
         else:
-            print(f"[CRITIC] Validation needs revision (confidence: {confidence:.1%})")
             issues_count = (
                 len(validation.get("schema_issues", [])) +
                 len(validation.get("cypher_issues", []))
             )
-            print(f"   Issues found: {issues_count}")
-        
-        print(f"[CRITIC] Saved to: {validation.get('_artifact_path')}")
+            log(f"[CRITIC] Validation needs revision (confidence: {confidence:.1%})")
+            log(f"[CRITIC] Issues found: {issues_count}")
         
         return {
             "status": "success",
@@ -336,7 +342,7 @@ async def run_critic_agent(
             "approved": status == "approved",
         }
     except Exception as e:
-        print(f"[CRITIC] Validation failed: {e}")
+        log(f"[CRITIC] Validation failed: {e}")
         return {
             "status": "error",
             "error": str(e),

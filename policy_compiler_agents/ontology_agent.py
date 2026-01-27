@@ -262,15 +262,20 @@ Remember: Every node type MUST include 'name' and 'source_citation' properties."
     return schema
 
 
-async def run_ontology_agent() -> Dict[str, Any]:
+async def run_ontology_agent(log_callback: callable = None) -> Dict[str, Any]:
     """
     Main entry point for the Ontology Designer agent.
     Reads policy, generates schema, saves artifact, returns result.
     
     Uses Gemini 3 Thinking Mode for comprehensive schema identification.
+    
+    Args:
+        log_callback: Optional callback for progress logging
     """
-    print("[ONTOLOGY] Starting schema design with Gemini 3 Thinking Mode...")
-    print("[ONTOLOGY] Using high thinking level for exhaustive node/relationship extraction")
+    log = log_callback or (lambda msg: print(msg))
+    
+    log("[ONTOLOGY] Starting schema design with Gemini 3 Thinking Mode...")
+    log("[ONTOLOGY] Using high thinking level for exhaustive extraction")
     
     try:
         schema = await design_ontology()
@@ -279,9 +284,8 @@ async def run_ontology_agent() -> Dict[str, Any]:
         rel_count = len(schema.get("relationships", []))
         has_thinking = "_thinking_trace" in schema
         
-        print(f"[ONTOLOGY] Schema designed: {node_count} node types, {rel_count} relationship types")
-        print(f"[ONTOLOGY] Thinking trace captured: {has_thinking}")
-        print(f"[ONTOLOGY] Saved to: {schema.get('_artifact_path')}")
+        log(f"[ONTOLOGY] Schema designed: {node_count} node types, {rel_count} relationships")
+        log(f"[ONTOLOGY] Thinking trace captured: {has_thinking}")
         
         return {
             "status": "success",
@@ -292,7 +296,7 @@ async def run_ontology_agent() -> Dict[str, Any]:
             }
         }
     except Exception as e:
-        print(f"[ONTOLOGY] Design failed: {e}")
+        log(f"[ONTOLOGY] Design failed: {e}")
         return {
             "status": "error",
             "error": str(e)

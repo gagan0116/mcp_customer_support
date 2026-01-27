@@ -97,7 +97,8 @@ async def clear_existing_graph() -> Dict[str, Any]:
 async def execute_cypher_batch(
     statements: List[str],
     batch_size: int = 10,
-    stop_on_error: bool = False
+    stop_on_error: bool = False,
+    log_callback: callable = None
 ) -> Dict[str, Any]:
     """
     Execute Cypher statements in batches.
@@ -106,10 +107,12 @@ async def execute_cypher_batch(
         statements: List of Cypher statements
         batch_size: Number of statements per batch
         stop_on_error: Whether to stop on first error
+        log_callback: Optional callback for progress logging
         
     Returns:
         Execution summary
     """
+    log = log_callback or (lambda msg: print(msg))
     results = []
     total_nodes_created = 0
     total_rels_created = 0
@@ -141,7 +144,7 @@ async def execute_cypher_batch(
         
         # Progress logging
         if (i + 1) % batch_size == 0:
-            print(f"   Executed {i + 1}/{len(statements)} statements...")
+            log(f"[BUILDER] Executed {i + 1}/{len(statements)} statements...")
     
     return {
         "total_statements": len(statements),
@@ -194,7 +197,8 @@ async def verify_graph() -> Dict[str, Any]:
 async def build_graph(
     extraction: Dict[str, Any] = None,
     clear_existing: bool = True,
-    create_constraints: bool = True
+    create_constraints: bool = True,
+    log_callback: callable = None
 ) -> Dict[str, Any]:
     """
     Build the knowledge graph from extracted Cypher statements.
@@ -203,17 +207,22 @@ async def build_graph(
         extraction: Extraction artifact with cypher_statements
         clear_existing: Whether to clear existing graph first
         create_constraints: Whether to create indexes/constraints
+        log_callback: Optional callback for progress logging
         
     Returns:
         Build results and verification
     """
+    log = log_callback or (lambda msg: print(msg))
+    
     # Test connection first
+    log("[BUILDER] Testing Neo4j connection...")
     conn_test = await test_connection()
     if conn_test.get("status") != "connected":
         return {
             "status": "error",
             "error": f"Neo4j connection failed: {conn_test.get('error')}",
         }
+    log("[BUILDER] Neo4j connected successfully")
     
     # Load extraction if not provided
     if extraction is None:
@@ -239,23 +248,25 @@ async def build_graph(
     
     # Clear existing graph if requested
     if clear_existing:
-        print("   Clearing existing graph...")
+        log("[BUILDER] Clearing existing graph...")
         clear_result = await clear_existing_graph()
         build_log["clear_result"] = clear_result
     
     # Create constraints if requested
     if create_constraints:
-        print("   Creating schema constraints...")
+        log("[BUILDER] Creating schema constraints...")
         constraint_result = await create_schema_constraints()
         build_log["constraints"] = constraint_result
     
     # Execute statements
-    print(f"   Executing {len(statements)} Cypher statements...")
-    execution_result = await execute_cypher_batch(statements)
+    log(f"[BUILDER] Executing {len(statements)} Cypher statements...")
+    execution_result = await execute_cypher_batch(statements, log_callback=log)
     build_log["execution"] = execution_result
     
+    log(f"[BUILDER] Executed: {execution_result.get('successful', 0)} success, {execution_result.get('failed', 0)} failed")
+    
     # Verify the graph
-    print("   Verifying graph...")
+    log("[BUILDER] Verifying graph...")
     verification = await verify_graph()
     build_log["verification"] = verification
     
@@ -276,39 +287,48 @@ async def build_graph(
 
 async def run_builder_agent(
     extraction: Dict[str, Any] = None,
-    clear_existing: bool = True
+    clear_existing: bool = True,
+    log_callback: callable = None
 ) -> Dict[str, Any]:
     """
     Main entry point for the Graph Builder agent.
     Builds the knowledge graph from extraction artifact.
+    
+    Args:
+        extraction: The extraction from Extraction Agent
+        clear_existing: Whether to clear existing graph
+        log_callback: Optional callback for progress logging
     """
-    print("[BUILDER] Building knowledge graph...")
+    log = log_callback or (lambda msg: print(msg))
+    
+    log("[BUILDER] Building knowledge graph...")
     
     try:
         result = await build_graph(
             extraction=extraction,
             clear_existing=clear_existing,
+            log_callback=log,
         )
         
         status = result.get("status", "unknown")
         verification = result.get("verification", {})
+        execution = result.get("execution", {})
         
         if status == "success":
-            print(f"[BUILDER] Graph built successfully!")
-            print(f"   Nodes: {verification.get('total_nodes', 0)}")
-            print(f"   With citations: {verification.get('nodes_with_citations', 0)}")
+            log(f"[BUILDER] ✓ Graph built successfully!")
+            log(f"[BUILDER] Nodes: {verification.get('total_nodes', 0)}")
+            log(f"[BUILDER] With citations: {verification.get('nodes_with_citations', 0)}")
         elif status == "partial_success":
-            print(f"[BUILDER] Graph built with some errors")
-            print(f"   Nodes: {verification.get('total_nodes', 0)}")
+            log(f"[BUILDER] ⚠ Graph built with some errors")
+            log(f"[BUILDER] Nodes: {verification.get('total_nodes', 0)}")
+            log(f"[BUILDER] Errors: {execution.get('failed', 0)} failed statements")
         else:
-            print(f"[BUILDER] Graph build failed")
-        
-        print(f"[BUILDER] Log saved to: {result.get('_artifact_path')}")
+            log(f"[BUILDER] ✗ Graph build failed")
         
         return {"status": "success", "build_result": result}
         
     except Exception as e:
-        print(f"[BUILDER] Build failed: {e}")
+        log(f"[BUILDER] Build failed: {e}")
         return {"status": "error", "error": str(e)}
     finally:
         await close_driver()

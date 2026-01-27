@@ -202,12 +202,20 @@ async def extract_from_page(
 async def extract_all_pages(
     policy_content: str,
     schema: Dict[str, Any],
-    model: str = "gemini-3-pro-preview"
+    model: str = "gemini-3-pro-preview",
+    log_callback: callable = None
 ) -> Tuple[List[Dict], List[Dict]]:
     """
     Phase 1: Extract triplets from all pages.
     Returns: (all_entities, all_relationships)
+    
+    Args:
+        policy_content: Policy markdown content
+        schema: Schema from Ontology Agent  
+        model: Gemini model to use
+        log_callback: Optional callback for progress logging
     """
+    log = log_callback or (lambda msg: print(msg))
     client = get_gemini_client()
     pages = split_by_page_markers(policy_content)
     
@@ -220,7 +228,7 @@ async def extract_all_pages(
             "content": policy_content
         }]
     
-    print(f"   [EXTRACT] Processing {len(pages)} pages in parallel (batch size 2)...")
+    log(f"[EXTRACT] Processing {len(pages)} pages in batches of 2...")
     
     all_entities = []
     all_relationships = []
@@ -230,7 +238,9 @@ async def extract_all_pages(
     for i in range(0, len(pages), batch_size):
         batch = pages[i:i + batch_size]
         batch_nums = [p['page_num'] for p in batch]
-        print(f"   [EXTRACT] Processing pages {batch_nums}...")
+        batch_num = (i // batch_size) + 1
+        total_batches = (len(pages) + batch_size - 1) // batch_size
+        log(f"[EXTRACT] Batch {batch_num}/{total_batches}: Pages {batch_nums}...")
         
         # Run batch in parallel
         tasks = [extract_from_page(page, schema, client, model) for page in batch]
@@ -238,7 +248,7 @@ async def extract_all_pages(
         
         for result in results:
             if isinstance(result, Exception):
-                print(f"   [WARN] Batch page failed: {result}")
+                log(f"[EXTRACT] ⚠ Page failed: {str(result)[:50]}")
                 continue
             all_entities.extend(result.get("entities", []))
             all_relationships.extend(result.get("relationships", []))
@@ -247,7 +257,7 @@ async def extract_all_pages(
         if i + batch_size < len(pages):
             await asyncio.sleep(0.5)
     
-    print(f"   [EXTRACT] Raw extraction: {len(all_entities)} entities, {len(all_relationships)} relationships")
+    log(f"[EXTRACT] Raw extraction: {len(all_entities)} entities, {len(all_relationships)} relationships")
     
     return all_entities, all_relationships
 
@@ -485,11 +495,20 @@ def generate_cypher_statements(
 async def extract_policy_rules(
     policy_content: str = None,
     schema: Dict[str, Any] = None,
-    model: str = None
+    model: str = None,
+    log_callback: callable = None
 ) -> Dict[str, Any]:
     """
     Full extraction pipeline: Extract -> Link -> Generate.
+    
+    Args:
+        policy_content: Policy markdown content
+        schema: Schema from Ontology Agent
+        model: Gemini model to use
+        log_callback: Optional callback for progress logging
     """
+    log = log_callback or (lambda msg: print(msg))
+    
     if policy_content is None:
         policy_content = read_policy_markdown()
     
@@ -503,18 +522,24 @@ async def extract_policy_rules(
         model = os.getenv("EXTRACTION_MODEL", "gemini-3-pro-preview")
     
     # Phase 1: Extract raw triplets
-    raw_entities, raw_relationships = await extract_all_pages(policy_content, schema, model)
+    log("[EXTRACTION] Phase 1: Extracting entities from pages...")
+    raw_entities, raw_relationships = await extract_all_pages(policy_content, schema, model, log_callback=log)
+    log(f"[EXTRACTION] Phase 1 done: {len(raw_entities)} raw entities found")
     
     # Phase 2: Link and validate
+    log("[EXTRACTION] Phase 2: Linking and validating entities...")
     linker = GraphLinker(schema)
     clean_entities, clean_relationships = linker.run(raw_entities, raw_relationships)
+    log(f"[EXTRACTION] Phase 2 done: {len(clean_entities)} clean entities")
     
     # Add citations programmatically
     cm = CitationManager()
     clean_entities = cm.add_citations_to_entities(clean_entities)
     
     # Phase 3: Generate Cypher
+    log("[EXTRACTION] Phase 3: Generating Cypher statements...")
     cypher_statements = generate_cypher_statements(clean_entities, clean_relationships, schema)
+    log(f"[EXTRACTION] Phase 3 done: {len(cypher_statements)} Cypher statements")
     
     extraction = {
         "cypher_statements": cypher_statements,
@@ -537,17 +562,26 @@ async def extract_policy_rules(
     return extraction
 
 
-async def run_extraction_agent(schema: Dict[str, Any] = None) -> Dict[str, Any]:
-    """Main entry point for the Extraction agent."""
-    print("[EXTRACTION] Starting 3-phase extraction pipeline...")
+async def run_extraction_agent(schema: Dict[str, Any] = None, log_callback: callable = None) -> Dict[str, Any]:
+    """
+    Main entry point for the Extraction agent.
+    
+    Args:
+        schema: The schema from Ontology Agent
+        log_callback: Optional callback for progress logging
+    """
+    log = log_callback or (lambda msg: print(msg))
+    
+    log("[EXTRACTION] Starting 3-phase extraction pipeline...")
     
     try:
-        extraction = await extract_policy_rules(schema=schema)
+        extraction = await extract_policy_rules(schema=schema, log_callback=log)
         
         summary = extraction.get("extraction_summary", {})
         
-        print(f"[EXTRACTION] Complete: {summary.get('cypher_count', 0)} Cypher statements")
-        print(f"[EXTRACTION] Saved to: {extraction.get('_artifact_path')}")
+        log(f"[EXTRACTION] Raw: {summary.get('raw_entities', 0)} entities, {summary.get('raw_relationships', 0)} rels")
+        log(f"[EXTRACTION] Clean: {summary.get('clean_entities', 0)} entities, {summary.get('clean_relationships', 0)} rels")
+        log(f"[EXTRACTION] Complete: {summary.get('cypher_count', 0)} Cypher statements")
         
         return {
             "status": "success",
@@ -555,7 +589,7 @@ async def run_extraction_agent(schema: Dict[str, Any] = None) -> Dict[str, Any]:
             "summary": summary
         }
     except Exception as e:
-        print(f"[EXTRACTION] Failed: {e}")
+        log(f"[EXTRACTION] Failed: {e}")
         return {
             "status": "error",
             "error": str(e)
