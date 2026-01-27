@@ -334,7 +334,7 @@ Extract all order and customer details from the text above."""
             )
             return response.text
         except Exception as e:
-            return f'{{"error": "LLM Extraction failed: {str(e)}"}'
+            return f"error: LLM Extraction failed: {str(e)}"
 
     async def verify_request_with_db(self, extracted_data: Dict[str, Any]):
         """
@@ -627,7 +627,7 @@ Extract all order and customer details from the text above."""
                 # Print summary
                 print("\n" + "="*50)
                 print(f"DECISION: {adjudication_result.get('decision', 'UNKNOWN')}")
-                print(f"REASON: {adjudication_result.get('details', {}).get('reason', 'N/A')}")
+                print(f"REASON: {adjudication_result.get('details', {}).get('reasoning', 'N/A')}")
                 print("="*50)
                 
                 # Insert refund case into database
