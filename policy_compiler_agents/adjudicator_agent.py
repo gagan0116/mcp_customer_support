@@ -628,11 +628,20 @@ class AdjudicatorV2:
             "policy_profile": policy_profile  # Include for debugging
         }
         
+        # =========================================================================
+        # PRESENTATION OUTPUT
+        # =========================================================================
         print("\n" + "="*60)
         print(f"FINAL DECISION: {decision_result['decision']}")
         print("="*60)
+        print(f"\nReasoning:\n{decision_result.get('reasoning', 'N/A')}\n")
+        
+        
+        print(f"\nCustomer Explanation:\n\"{explanation}\"")
+        print("="*60)
         
         return output
+
 
 
 # =============================================================================

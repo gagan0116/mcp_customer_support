@@ -130,7 +130,7 @@ def get_source_text(citations: List[str], context_lines: int = 5) -> Dict[str, s
         
         if extracted_text:
             source_texts[citation] = extracted_text
-            print(f"   [SOURCE] Extracted {end - start} lines for citation: {citation[:30]}...")
+            print(f"   [SOURCE] Extracted {end - start} lines for citation: {citation}")
         else:
             print(f"   [SOURCE] No text found for citation: {citation}")
     
