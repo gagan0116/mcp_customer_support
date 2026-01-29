@@ -41,17 +41,17 @@ async def fetch_graph_data() -> Dict[str, Any]:
     Returns:
         Dictionary with 'nodes' and 'edges' lists for visualization
     """
-    # Fetch all nodes
+    # Fetch all nodes (using elementId instead of deprecated id)
     nodes_query = """
     MATCH (n)
-    RETURN id(n) as id, labels(n) as labels, properties(n) as props
+    RETURN elementId(n) as id, labels(n) as labels, properties(n) as props
     """
     nodes_result = await execute_query(nodes_query)
     
-    # Fetch all relationships
+    # Fetch all relationships (using elementId instead of deprecated id)
     rels_query = """
     MATCH (a)-[r]->(b)
-    RETURN id(a) as source, id(b) as target, type(r) as type
+    RETURN elementId(a) as source, elementId(b) as target, type(r) as type
     """
     rels_result = await execute_query(rels_query)
     

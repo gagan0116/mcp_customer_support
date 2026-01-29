@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Policy Knowledge Base Compiler</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Vis.js -->
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <style>
+        #mynetwork {
+            width: 100%;
+            height: 600px;
+            border: 1px solid #e5e7eb;
+            background-color: #f9fafb;
+        }
+
+        .step-active {
+            border-left: 4px solid #3b82f6;
+            background-color: #eff6ff;
+        }
+
+        .step-completed {
+            border-left: 4px solid #10b981;
+            opacity: 0.7;
+        }
+
+        .step-pending {
+            border-left: 4px solid #e5e7eb;
+            opacity: 0.5;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-50 text-gray-800 font-sans">
+
+    <div class="container mx-auto px-4 py-8 max-w-6xl">
+        <header class="mb-8 text-center">
+            <h1 class="text-4xl font-bold text-gray-900 mb-2">Policy Compiler Agent</h1>
+            <p class="text-lg text-gray-600">Turn PDF Policies into queryable Knowledge Graphs</p>
+        </header>
+
+        <!-- Main Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+            <!-- Left Panel: Controls & Status -->
+            <div class="lg:col-span-1 space-y-6">
+
+                <!-- Upload Card -->
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                    <h2 class="text-xl font-semibold mb-4">1. Upload Policy</h2>
+                    <div class="space-y-4">
+                        <div class="border-2 border-dashed border-gray-300 rounded-md p-6 text-center hover:bg-gray-50 transition"
+                            id="drop-zone">
+                            <input type="file" id="file-input" multiple accept=".pdf" class="hidden">
+                            <label for="file-input" class="cursor-pointer">
+                                <span class="text-blue-600 font-medium">Click to upload</span> or drag and drop
+                                <div class="text-xs text-gray-400 mt-1">PDF files only</div>
+                            </label>
+                            <div id="file-list" class="mt-2 text-sm text-gray-600 text-left"></div>
+                        </div>
+                        <button id="compile-btn"
+                            class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition disabled:opacity-50 disabled:cursor-not-allowed">
+                            Start Compilation
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Status Card -->
+                <div class="bg-white p-6 rounded-lg shadow-md hidden" id="status-card">
+                    <h2 class="text-xl font-semibold mb-4">2. Progress</h2>
+                    <div class="mb-2 flex justify-between text-sm font-medium text-gray-700">
+                        <span id="status-text">Initializing...</span>
+                        <span id="progress-percent">0%</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2.5 mb-6">
+                        <div class="bg-blue-600 h-2.5 rounded-full transition-all duration-500" style="width: 0%"
+                            id="progress-bar"></div>
+                    </div>
+
+                    <div class="space-y-2 max-h-64 overflow-y-auto font-mono text-xs bg-gray-900 text-green-400 p-3 rounded"
+                        id="logs">
+                        <!-- Logs go here -->
+                    </div>
+                </div>
+
+                <!-- Visualize Existing Button -->
+                <div class="bg-white p-6 rounded-lg shadow-md" id="viz-existing-card">
+                    <h2 class="text-xl font-semibold mb-4">Explore</h2>
+                    <p class="text-sm text-gray-600 mb-4">View the current Knowledge Graph without recompiling.</p>
+                    <button id="viz-btn"
+                        class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded transition">
+                        Visualize Graph
+                    </button>
+                </div>
+            </div>
+
+            <!-- Right Panel: Visualization -->
+            <div class="lg:col-span-2">
+                <div class="bg-white p-6 rounded-lg shadow-md h-full">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xl font-semibold">Knowledge Graph</h2>
+                        <div class="text-sm text-gray-500" id="graph-stats">Nodes: 0 | Edges: 0</div>
+                    </div>
+                    <div id="mynetwork"></div>
+                    <div class="mt-4 text-xs text-gray-400 text-center">
+                        Scroll to zoom • Drag to pan • Click nodes for details
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const fileInput = document.getElementById('file-input');
+        const fileList = document.getElementById('file-list');
+        const compileBtn = document.getElementById('compile-btn');
+        const statusCard = document.getElementById('status-card');
+        const vizExistingCard = document.getElementById('viz-existing-card');
+        const progressBar = document.getElementById('progress-bar');
+        const progressPercent = document.getElementById('progress-percent');
+        const statusText = document.getElementById('status-text');
+        const logsDiv = document.getElementById('logs');
+        const vizBtn = document.getElementById('viz-btn');
+        const graphStats = document.getElementById('graph-stats');
+
+        let currentJobId = null;
+        let pollInterval = null;
+
+        // File Selection
+        fileInput.addEventListener('change', (e) => {
+            const files = Array.from(e.target.files);
+            fileList.innerHTML = files.map(f => `<div>📄 ${f.name}</div>`).join('');
+            compileBtn.disabled = files.length === 0;
+        });
+
+        // Compile Button
+        compileBtn.addEventListener('click', async () => {
+            const files = fileInput.files;
+            if (files.length === 0) return;
+
+            const formData = new FormData();
+            for (let i = 0; i < files.length; i++) {
+                formData.append('files', files[i]);
+            }
+
+            // UI Reset
+            compileBtn.disabled = true;
+            statusCard.classList.remove('hidden');
+            logsDiv.innerHTML = '<div>Starting upload...</div>';
+            progressBar.style.width = '0%';
+
+            try {
+                const response = await fetch('/api/compile', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) throw new Error('Upload failed');
+
+                const data = await response.json();
+                currentJobId = data.job_id;
+
+                startPolling();
+
+            } catch (err) {
+                alert('Error: ' + err.message);
+                compileBtn.disabled = false;
+            }
+        });
+
+        // Visualize Button (Direct)
+        vizBtn.addEventListener('click', () => {
+            loadGraph();
+        });
+
+        function startPolling() {
+            if (pollInterval) clearInterval(pollInterval);
+            pollInterval = setInterval(checkStatus, 3000);
+        }
+
+        async function checkStatus() {
+            if (!currentJobId) return;
+
+            try {
+                const response = await fetch(`/api/status/${currentJobId}`);
+                const data = await response.json();
+
+                // Update Progress
+                const percent = data.progress || 0;
+                progressBar.style.width = `${percent}%`;
+                progressPercent.innerText = `${percent}%`;
+                statusText.innerText = `Status: ${data.status}`; // data.status.replace('_', ' ').toUpperCase();
+
+                // Update Logs
+                if (data.logs) {
+                    logsDiv.innerHTML = data.logs.map(l => `<div>${l}</div>`).join('');
+                    logsDiv.scrollTop = logsDiv.scrollHeight;
+                }
+
+                if (data.status === 'completed') {
+                    clearInterval(pollInterval);
+                    statusText.innerText = 'COMPLETED';
+                    statusText.classList.add('text-green-600', 'font-bold');
+                    vizExistingCard.classList.remove('hidden');
+                    loadGraph(); // Auto-load graph
+                    compileBtn.disabled = false;
+                } else if (data.status === 'failed') {
+                    clearInterval(pollInterval);
+                    statusText.innerText = 'FAILED';
+                    statusText.classList.add('text-red-600', 'font-bold');
+                    alert('Job Failed: ' + data.error);
+                    compileBtn.disabled = false;
+                }
+
+            } catch (err) {
+                console.error("Polling error", err);
+            }
+        }
+
+        async function loadGraph() {
+            try {
+                const response = await fetch('/api/graph');
+                const data = await response.json();
+                renderGraph(data);
+            } catch (err) {
+                console.error("Graph fetch error", err);
+                alert("Failed to load graph data");
+            }
+        }
+
+        function renderGraph(data) {
+            const container = document.getElementById('mynetwork');
+
+            // Stats
+            graphStats.innerText = `Nodes: ${data.nodes.length} | Edges: ${data.edges.length}`;
+
+            const options = {
+                nodes: {
+                    shape: 'dot',
+                    size: 16,
+                    font: { size: 14, color: '#333' },
+                    borderWidth: 2
+                },
+                edges: {
+                    width: 1,
+                    smooth: { type: 'continuous' },
+                    color: { inherit: 'from', opacity: 0.6 }
+                },
+                physics: {
+                    stabilization: false,
+                    barnesHut: {
+                        gravitationalConstant: -8000,
+                        springConstant: 0.04,
+                        springLength: 95
+                    }
+                },
+                interaction: {
+                    tooltipDelay: 200,
+                    hideEdgesOnDrag: true
+                }
+            };
+
+            const network = new vis.Network(container, data, options);
+
+            network.on("click", function (params) {
+                if (params.nodes.length > 0) {
+                    const nodeId = params.nodes[0];
+                    const node = data.nodes.find(n => n.id === nodeId);
+                    console.log("Clicked node:", node);
+                    // Could show details modal here
+                }
+            });
+        }
+    </script>
+</body>
+
+</html>

@@ -15,12 +15,17 @@ Gemini 3 Features Used:
 import json
 import os
 import re
+import asyncio
 from typing import Any, Dict, List
 
 from google.genai import types
 from google.genai.types import ThinkingConfig, Schema
 
 from .tools import get_gemini_client, load_artifact, save_artifact
+
+# Retry settings for transient API errors (503, 429)
+MAX_RETRIES = 3
+BASE_DELAY = 5.0
 
 
 # =============================================================================
@@ -191,18 +196,36 @@ Perform comprehensive validation and provide your assessment."""
 
     print("[CRITIC] Using Gemini 3 Thinking Mode (high) for thorough validation...")
     
-    response = await client.aio.models.generate_content(
-        model=model,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            system_instruction=CRITIC_SYSTEM_PROMPT,
-            response_mime_type="application/json",
-            response_schema=VALIDATION_RESPONSE_SCHEMA,
-            thinking_config=ThinkingConfig(
-                thinking_level="high"
-            ),
-        ),
-    )
+    # === API CALL WITH RETRY FOR TRANSIENT ERRORS ===
+    last_error = None
+    for attempt in range(MAX_RETRIES):
+        try:
+            response = await client.aio.models.generate_content(
+                model=model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=CRITIC_SYSTEM_PROMPT,
+                    response_mime_type="application/json",
+                    response_schema=VALIDATION_RESPONSE_SCHEMA,
+                    thinking_config=ThinkingConfig(
+                        thinking_level="high"
+                    ),
+                ),
+            )
+            break  # Success, exit retry loop
+        except Exception as e:
+            last_error = e
+            error_str = str(e).lower()
+            is_retryable = "503" in str(e) or "429" in str(e) or "overloaded" in error_str or "unavailable" in error_str
+            if is_retryable and attempt < MAX_RETRIES - 1:
+                delay = BASE_DELAY * (2 ** attempt)
+                print(f"[CRITIC] API error (attempt {attempt + 1}/{MAX_RETRIES}): {str(e)[:80]}")
+                print(f"[CRITIC] Retrying in {delay:.1f}s...")
+                await asyncio.sleep(delay)
+            else:
+                raise
+    else:
+        raise last_error  # All retries failed
     
     # Extract response text (handle thinking mode response structure)
     response_text = response.text

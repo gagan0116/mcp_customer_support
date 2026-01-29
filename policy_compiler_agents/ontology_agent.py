@@ -14,12 +14,17 @@ Gemini 3 Features Used:
 
 import os
 import json
+import asyncio
 from typing import Any, Dict
 
 from google.genai import types
 from google.genai.types import ThinkingConfig, Schema
 
 from .tools import get_gemini_client, read_policy_markdown, save_artifact
+
+# Retry settings for transient API errors (503, 429)
+MAX_RETRIES = 3
+BASE_DELAY = 5.0
 
 PROPERTY_SCHEMA = Schema(
     type="object",
@@ -175,19 +180,36 @@ Remember: Every node type MUST include 'name' and 'source_citation' properties."
 
     print("[ONTOLOGY] Using Gemini 3 Thinking Mode (high) for comprehensive schema design...")
     
-    # === GEMINI 3 ENHANCED API CALL ===
-    response = await client.aio.models.generate_content(
-        model=model,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            system_instruction=ONTOLOGY_SYSTEM_PROMPT,
-            response_mime_type="application/json",
-            response_schema=ONTOLOGY_RESPONSE_SCHEMA,
-            thinking_config=ThinkingConfig(
-                thinking_level="high"
-            ),
-        ),
-    )
+    # === GEMINI 3 ENHANCED API CALL WITH RETRY ===
+    last_error = None
+    for attempt in range(MAX_RETRIES):
+        try:
+            response = await client.aio.models.generate_content(
+                model=model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=ONTOLOGY_SYSTEM_PROMPT,
+                    response_mime_type="application/json",
+                    response_schema=ONTOLOGY_RESPONSE_SCHEMA,
+                    thinking_config=ThinkingConfig(
+                        thinking_level="high"
+                    ),
+                ),
+            )
+            break  # Success, exit retry loop
+        except Exception as e:
+            last_error = e
+            error_str = str(e).lower()
+            is_retryable = "503" in str(e) or "429" in str(e) or "overloaded" in error_str or "unavailable" in error_str
+            if is_retryable and attempt < MAX_RETRIES - 1:
+                delay = BASE_DELAY * (2 ** attempt)
+                print(f"[ONTOLOGY] API error (attempt {attempt + 1}/{MAX_RETRIES}): {str(e)[:80]}")
+                print(f"[ONTOLOGY] Retrying in {delay:.1f}s...")
+                await asyncio.sleep(delay)
+            else:
+                raise
+    else:
+        raise last_error  # All retries failed
     
     # Extract thinking process if available (for debugging/transparency)
     thinking_text = None
