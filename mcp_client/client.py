@@ -396,6 +396,7 @@ Extract all order and customer details from the text above."""
         messages.append(context_str)
 
         max_turns = 8
+        fuzzy_tools_used = []  # Track if llm_find_orders or select_order_id were used
         for i in range(max_turns):
             print(f"\n--- Turn {i+1} ---")
             
@@ -430,7 +431,10 @@ Extract all order and customer details from the text above."""
 
                 if "action" in decision and decision["action"] == "terminate":
                     print(f"🏁 Agent Finished: {decision.get('reason')}")
-                    return decision.get("verified_data")
+                    return {
+                        "verified_data": decision.get("verified_data"),
+                        "fuzzy_tools_used": fuzzy_tools_used
+                    }
                 
                 tool_name = decision.get("tool_name")
                 args = decision.get("arguments", {})
@@ -447,6 +451,11 @@ Extract all order and customer details from the text above."""
 
                 # Execute Tool
                 print(f"▶️ Executing: {tool_name}...")
+                
+                # Track fuzzy matching tools
+                if tool_name in ["llm_find_orders", "select_order_id"]:
+                    fuzzy_tools_used.append(tool_name)
+                
                 result = await db_session.call_tool(tool_name, arguments=args)
                 tool_output_str = result.content[0].text
                 
@@ -593,14 +602,17 @@ Extract all order and customer details from the text above."""
         print(f"\nSaved extraction to {output_path}")
 
         # --- DB Verification (Agentic) ---
-        verified_record = await self.verify_request_with_db(extracted_data)
-
-        if not verified_record:
-            print("\n⛔ Verification failed: Request sent for Human Review.")
-            print("Skipping Adjudication.")
-            return
-
-        # Merge extracted intent fields into verified record
+        verification_result = await self.verify_request_with_db(extracted_data)
+        
+        # Extract verified data and fuzzy tools info from result
+        verified_record = None
+        fuzzy_tools_used = []
+        
+        if verification_result:
+            verified_record = verification_result.get("verified_data")
+            fuzzy_tools_used = verification_result.get("fuzzy_tools_used", [])
+        
+        # Merge extracted intent fields into verified record and save
         if verified_record:
             verified_record["return_request_date"] = extracted_data.get("return_request_date")
             verified_record["return_category"] = extracted_data.get("return_category")
@@ -614,7 +626,22 @@ Extract all order and customer details from the text above."""
                 json.dump(verified_record, f, indent=2)
             print(f"\n✅ Verified Order Details saved to {verified_path}")
             
-            # --- Adjudication ---
+            # Check if fuzzy matching tools were used - requires human review
+            if fuzzy_tools_used:
+                print(f"\n⚠️ HUMAN REVIEW REQUIRED")
+                print(f"   Order was found using: {fuzzy_tools_used}")
+                print(f"   Verified order saved. Skipping automatic adjudication.")
+                
+                # Insert refund case with pending human review status
+                self.insert_refund_case(
+                    email_data=email_data,
+                    extracted_data=extracted_data,
+                    verified_record=verified_record,
+                    adjudication_result=None  # No adjudication - needs human review
+                )
+                return
+            
+            # --- Adjudication (only if exact match was found) ---
             print("\n" + "="*50)
             print("RUNNING ADJUDICATOR AGENT")
             print("="*50)
