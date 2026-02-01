@@ -595,8 +595,13 @@ Extract all order and customer details from the text above."""
         # --- DB Verification (Agentic) ---
         verified_record = await self.verify_request_with_db(extracted_data)
 
+        if not verified_record:
+            print("\n⛔ Verification failed: Request sent for Human Review.")
+            print("Skipping Adjudication.")
+            return
+
+        # Merge extracted intent fields into verified record
         if verified_record:
-            # Merge extracted intent fields into verified record
             verified_record["return_request_date"] = extracted_data.get("return_request_date")
             verified_record["return_category"] = extracted_data.get("return_category")
             verified_record["return_reason_category"] = extracted_data.get("return_reason_category")
