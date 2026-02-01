@@ -577,3 +577,220 @@ Extract all order and customer details from the text above."""
 
     async def cleanup(self):
         await self.exit_stack.aclose()
+    async def process_demo_scenario(self, scenario_data: dict):
+        """
+        Process a demo scenario from JSON and yield SSE events for real-time UI updates.
+        This follows the EXACT same approach as process_single_email, just with:
+        - JSON input instead of GCS blob download
+        - SSE yield statements for real-time UI updates
+        
+        Yields dict events: {"step": str, "status": str, "log": str, "data": dict}
+        """
+        # Use 'data' variable name to match process_single_email
+        data = scenario_data
+        
+        # ========== STEP 1: CLASSIFICATION ==========
+        yield {"step": "classification", "status": "active", "log": "📧 Analyzing email classification...", "data": None}
+        
+        category = data.get("category", "NONE")
+        confidence = data.get("confidence", 0)
+        
+        yield {"step": "classification", "status": "complete", "log": f"📧 Category: {category} (confidence: {confidence})", "data": {
+            "category": category,
+            "confidence": confidence
+        }}
+
+        if category not in ["RETURN", "REPLACEMENT", "REFUND"]:
+            print(f"Skipping category: {category}")
+            yield {"step": "decision", "status": "complete", "log": f"⏭️ Skipping - category {category} not eligible", "data": {"decision": "SKIPPED"}}
+            return
+
+        # Check doc_session (same as process_single_email)
+        doc_session = self.sessions.get("doc_server")
+        if not doc_session:
+            yield {"step": "error", "status": "error", "log": "❌ doc_server not connected", "data": None}
+            return
+
+        # ========== STEP 2: DOCUMENT PARSING ==========
+        yield {"step": "parsing", "status": "active", "log": "📄 Processing attachments...", "data": None}
+        
+        # Build combined_text - EXACT same format as process_single_email
+        combined_text = f"""
+        --- EMAIL METADATA ---
+        Sender: {data.get('user_id')}
+        Received: {data.get('received_at')}
+        Category: {category}
+        Body: {data.get('email_body','')}
+        """
+        
+        # Process attachments - EXACT same logic as process_single_email
+        attachments = data.get("attachments", [])
+        pdf_count = 0
+        image_count = 0
+        
+        for attachment in attachments:
+            filename = attachment.get("filename", "")
+            
+            # PDF processing - matches process_single_email exactly
+            if filename.lower().endswith(".pdf"):
+                pdf_count += 1
+                yield {"step": "parsing", "status": "active", "log": f"📄 Parsing PDF: {filename}...", "data": None}
+                
+                file_data = attachment.get("data", "")
+                if isinstance(file_data, dict):
+                    file_data = file_data.get("data", "")
+                
+                if file_data:
+                    try:
+                        txt_path = f"/tmp/{filename}.txt"
+                        parse_result = await doc_session.call_tool(
+                            "process_invoice",
+                            arguments={"base64_content": file_data, "output_txt_path": txt_path}
+                        )
+                        # Same header format as process_single_email
+                        combined_text += f"\n\n--- INVOICE {filename} ---\n{parse_result.content[0].text}"
+                        yield {"step": "parsing", "status": "active", "log": f"✅ Parsed {filename}", "data": {"filename": filename}}
+                    except Exception as e:
+                        yield {"step": "parsing", "status": "active", "log": f"⚠️ Error parsing {filename}: {e}", "data": None}
+            
+            # Image processing - matches process_single_email exactly
+            elif filename.lower().endswith((".jpg", ".png", ".jpeg", ".webp")):
+                image_count += 1
+                defect_session = self.sessions.get("defect_analyzer")
+                
+                if defect_session:
+                    yield {"step": "defect", "status": "active", "log": f"🔍 Analyzing image: {filename}...", "data": None}
+                    
+                    file_data = attachment.get("data", "")
+                    if isinstance(file_data, dict):
+                        file_data = file_data.get("data", "")
+                    
+                    if file_data:
+                        try:
+                            result = await defect_session.call_tool(
+                                "analyze_defect_image",
+                                arguments={"image_base64": file_data}
+                            )
+                            # Same header format as process_single_email: "--- IMAGE filename ---"
+                            combined_text += f"\n\n--- IMAGE {filename} ---\n{result.content[0].text}"
+                            yield {"step": "defect", "status": "active", "log": f"✅ Analyzed {filename}", "data": {"filename": filename, "analysis": result.content[0].text}}
+                        except Exception as e:
+                            yield {"step": "defect", "status": "active", "log": f"⚠️ Error analyzing {filename}: {e}", "data": None}
+
+        # Complete parsing step
+        if pdf_count == 0:
+            yield {"step": "parsing", "status": "complete", "log": "📄 No PDF documents to parse", "data": None}
+        else:
+            yield {"step": "parsing", "status": "complete", "log": f"📄 Parsed {pdf_count} PDF document(s)", "data": None}
+
+        # Complete defect step
+        if image_count == 0:
+            yield {"step": "defect", "status": "complete", "log": "🔍 No defect images in this request", "data": None}
+        else:
+            yield {"step": "defect", "status": "complete", "log": f"🔍 Analyzed {image_count} image(s)", "data": None}
+
+        # ========== STEP 4: EXTRACTION ==========
+        # Same as process_single_email
+        yield {"step": "extraction", "status": "active", "log": "🧠 Extracting order details with Gemini...", "data": None}
+        
+        extraction_json = await self.extract_order_details(combined_text)
+        try:
+            extracted_data = json.loads(extraction_json)
+        except:
+            extracted_data = {}
+        
+        yield {"step": "extraction", "status": "complete", "log": f"🧠 Extracted: Order #{extracted_data.get('order_invoice_id', 'N/A')}, Customer: {extracted_data.get('customer_email', 'N/A')}", "data": extracted_data}
+
+        # ========== STEP 5: VERIFICATION ==========
+        # Same as process_single_email
+        yield {"step": "verification", "status": "active", "log": "🔐 Starting database verification...", "data": None}
+        
+        verification_result = await self.verify_request_with_db(extracted_data)
+        
+        # Extract verified data and fuzzy tools info from result (same as process_single_email)
+        verified_record = None
+        fuzzy_tools_used = []
+        
+        if verification_result:
+            verified_record = verification_result.get("verified_data")
+            fuzzy_tools_used = verification_result.get("fuzzy_tools_used", [])
+
+        # ========== STEP 6: ADJUDICATION ==========
+        adjudication_result = None
+        
+        if verified_record:
+            yield {"step": "verification", "status": "complete", "log": f"🔐 Verified! Order found: #{verified_record.get('order_id', 'N/A')}", "data": verified_record}
+            
+            # Merge extracted intent fields into verified record (same as process_single_email)
+            verified_record["return_request_date"] = extracted_data.get("return_request_date")
+            verified_record["return_category"] = extracted_data.get("return_category")
+            verified_record["return_reason_category"] = extracted_data.get("return_reason_category")
+            verified_record["return_reason"] = extracted_data.get("return_reason")
+            verified_record["item_condition"] = extracted_data.get("item_condition")
+            verified_record["confidence_score"] = extracted_data.get("confidence_score")
+            
+            # Check if fuzzy matching tools were used - requires human review (same as process_single_email)
+            if fuzzy_tools_used:
+                print(f"\n⚠️ HUMAN REVIEW REQUIRED")
+                print(f"   Order was found using: {fuzzy_tools_used}")
+                print(f"   Verified order saved. Skipping automatic adjudication.")
+                
+                yield {"step": "verification", "status": "complete", "log": f"⚠️ Fuzzy match used: {fuzzy_tools_used} - Human review required", "data": {"fuzzy_tools_used": fuzzy_tools_used}}
+                yield {"step": "adjudication", "status": "complete", "log": "⏭️ Skipping adjudication - requires human review", "data": None}
+                yield {"step": "decision", "status": "complete", "log": "⚠️ DECISION: PENDING_REVIEW (fuzzy match)", "data": {
+                    "decision": "PENDING_REVIEW",
+                    "reasoning": f"Order was found using fuzzy matching: {fuzzy_tools_used}"
+                }}
+                
+                print("Processing Complete.")
+                return
+            
+            # --- Adjudication (only if exact match was found) --- (same as process_single_email)
+            try:
+                yield {"step": "adjudication", "status": "active", "log": "⚖️ Checking against return policy...", "data": None}
+                
+                print("\n" + "="*50)
+                print("RUNNING ADJUDICATOR AGENT")
+                print("="*50)
+                
+                adjudicator = Adjudicator()
+                adjudication_result = await adjudicator.adjudicate(verified_record)
+                
+                decision = adjudication_result.get("decision", "UNKNOWN")
+                reasoning = adjudication_result.get("details", {}).get("reasoning", "N/A")
+                
+                print(f"\nDECISION: {decision}")
+                print(f"REASON: {reasoning}")
+                
+                yield {"step": "adjudication", "status": "complete", "log": f"⚖️ Policy check complete", "data": adjudication_result}
+                
+                # Final decision
+                yield {"step": "decision", "status": "active", "log": "✅ Generating final decision...", "data": None}
+                yield {"step": "decision", "status": "complete", "log": f"✅ DECISION: {decision}", "data": {
+                    "decision": decision,
+                    "reasoning": reasoning,
+                    "verified_record": verified_record,
+                    "adjudication": adjudication_result
+                }}
+                
+            except Exception as e:
+                print(f"⚠️ Adjudication failed: {e}")
+                import traceback
+                traceback.print_exc()
+                
+                yield {"step": "adjudication", "status": "error", "log": f"❌ Adjudication failed: {e}", "data": None}
+                yield {"step": "decision", "status": "complete", "log": "⚠️ DECISION: MANUAL_REVIEW (adjudication error)", "data": {"decision": "MANUAL_REVIEW"}}
+        
+        else:
+            # No verified order data was returned (same as process_single_email)
+            print("ℹ️ No verified order data was returned. Marking as PENDING_REVIEW.")
+            
+            yield {"step": "verification", "status": "complete", "log": "⚠️ No order found - sending to human review", "data": None}
+            yield {"step": "adjudication", "status": "complete", "log": "⏭️ Skipping adjudication - no verified order", "data": None}
+            yield {"step": "decision", "status": "complete", "log": "⚠️ DECISION: PENDING_REVIEW (order not found)", "data": {
+                "decision": "PENDING_REVIEW",
+                "reasoning": "Order not found in database"
+            }}
+        
+        print("Processing Complete.")
+

@@ -319,138 +319,213 @@ async function handleSubmit() {
 }
 
 async function runPipeline() {
-    const scenario = state.selectedScenario;
-    const hasImages = scenario.attachments && scenario.attachments.some(a =>
-        a.mimeType && a.mimeType.startsWith('image/')
-    );
-    const hasPdfs = scenario.attachments && scenario.attachments.some(a =>
-        a.mimeType === 'application/pdf'
-    );
+    const scenario = state.selectedScenario; // Already the scenario object
 
-    const steps = [
-        {
-            name: 'classification',
-            duration: 1500,
-            log: '📧 Classifying email intent...',
-            onComplete: () => {
-                // Update result category
-                elements.resultCategory.textContent = scenario.category;
-                elements.resultCategory.className = `result-value category-${scenario.category.toLowerCase()}`;
+    // API endpoint - Cloud Run backend
+    const API_URL = 'https://mcp-processor-171083103370.northamerica-northeast1.run.app/process-demo';
 
-                const conf = Math.round(scenario.confidence * 100);
+    // Reset all steps to pending
+    document.querySelectorAll('.pipeline-step').forEach(step => {
+        step.classList.remove('active', 'completed', 'error');
+        const status = step.querySelector('.step-status');
+        if (status) {
+            status.textContent = 'Pending';
+            status.className = 'step-status pending';
+        }
+        const result = step.querySelector('.step-result');
+        if (result) result.classList.add('hidden');
+    });
+
+    addLog('info', '🌐 Connecting to backend...');
+
+    try {
+        const response = await fetch(API_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(scenario)
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        addLog('success', '✅ Connected to Cloud Run backend');
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let lastDecision = null;
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+
+            // Parse SSE events from buffer
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+            for (const line of lines) {
+                if (line.startsWith('data:')) {
+                    try {
+                        const jsonStr = line.substring(5).trim();
+                        if (!jsonStr) continue;
+
+                        const event = JSON.parse(jsonStr);
+
+                        // Handle progress events
+                        if (event.step && event.status) {
+                            const stepElement = document.querySelector(`[data-step="${event.step}"]`);
+
+                            if (stepElement) {
+                                const statusEl = stepElement.querySelector('.step-status');
+
+                                if (event.status === 'active') {
+                                    stepElement.classList.add('active');
+                                    stepElement.classList.remove('completed', 'error');
+                                    if (statusEl) {
+                                        statusEl.textContent = 'Processing...';
+                                        statusEl.className = 'step-status processing';
+                                    }
+                                } else if (event.status === 'complete') {
+                                    stepElement.classList.remove('active');
+                                    stepElement.classList.add('completed');
+                                    if (statusEl) {
+                                        statusEl.textContent = 'Completed';
+                                        statusEl.className = 'step-status completed';
+                                    }
+                                    // Show step result if available
+                                    const resultEl = stepElement.querySelector('.step-result');
+                                    if (resultEl) resultEl.classList.remove('hidden');
+                                } else if (event.status === 'error') {
+                                    stepElement.classList.remove('active');
+                                    stepElement.classList.add('error');
+                                    if (statusEl) {
+                                        statusEl.textContent = 'Error';
+                                        statusEl.className = 'step-status error';
+                                    }
+                                }
+                            }
+
+                            // Add log
+                            if (event.log) {
+                                const logType = event.status === 'error' ? 'error' :
+                                    event.status === 'complete' ? 'success' : 'info';
+                                addLog(logType, event.log);
+                            }
+
+                            // Update UI with real data
+                            if (event.data) {
+                                updateStepData(event.step, event.data);
+
+                                // Capture decision for final message
+                                if (event.step === 'decision' && event.data.decision) {
+                                    lastDecision = event.data;
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('Failed to parse SSE event:', e, line);
+                    }
+                }
+            }
+        }
+
+        // Pipeline complete
+        stopTimer();
+        state.isProcessing = false;
+
+        elements.submitBtn.querySelector('.btn-content').classList.remove('hidden');
+        elements.submitBtn.querySelector('.btn-loader').classList.add('hidden');
+        elements.submitBtn.disabled = false;
+
+        if (lastDecision) {
+            addLog('success', `🎉 Pipeline completed! Decision: ${lastDecision.decision}`);
+        } else {
+            addLog('success', '🎉 Pipeline completed!');
+        }
+
+    } catch (error) {
+        console.error('Pipeline error:', error);
+        addLog('error', `❌ Pipeline failed: ${error.message}`);
+
+        stopTimer();
+        state.isProcessing = false;
+
+        elements.submitBtn.querySelector('.btn-content').classList.remove('hidden');
+        elements.submitBtn.querySelector('.btn-loader').classList.add('hidden');
+        elements.submitBtn.disabled = false;
+    }
+}
+
+// Helper function to update step data in the UI
+function updateStepData(step, data) {
+    if (!data) return;
+
+    switch (step) {
+        case 'classification':
+            if (data.category) {
+                elements.resultCategory.textContent = data.category;
+                elements.resultCategory.className = `result-value category-${data.category.toLowerCase()}`;
+            }
+            if (data.confidence !== undefined) {
+                const conf = Math.round(data.confidence * 100);
                 elements.resultConfidenceFill.style.width = `${conf}%`;
                 elements.resultConfidenceValue.textContent = `${conf}%`;
             }
-        },
-        {
-            name: 'parsing',
-            duration: 2000,
-            log: '📄 Parsing attached documents with LlamaParse...',
-            onComplete: () => {
-                if (hasPdfs) {
-                    const pdfs = scenario.attachments.filter(a => a.mimeType === 'application/pdf');
-                    elements.parsedFiles.innerHTML = pdfs.map(p => `
-                        <div class="result-file">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <polyline points="20 6 9 17 4 12"/>
-                            </svg>
-                            <span>${p.filename}</span>
-                        </div>
-                    `).join('');
-                } else {
-                    elements.parsedFiles.innerHTML = `<span class="no-images-text">No PDF documents to parse</span>`;
+            break;
+
+        case 'parsing':
+            if (data.filename && elements.parsedFiles) {
+                const existing = elements.parsedFiles.innerHTML || '';
+                elements.parsedFiles.innerHTML = existing + `
+                    <div class="result-file">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                        <span>${data.filename}</span>
+                    </div>
+                `;
+            }
+            break;
+
+        case 'defect':
+            if (data.analysis && elements.defectAnalysis) {
+                elements.defectAnalysis.innerHTML = `
+                    <div class="defect-result">
+                        <span class="defect-status">✓ Image analyzed</span>
+                        <span class="defect-detail">${data.analysis.substring(0, 150)}...</span>
+                    </div>
+                `;
+            }
+            break;
+
+        case 'extraction':
+            if (data.order_invoice_id || data.customer_email) {
+                // Could update extraction details panel if it exists
+            }
+            break;
+
+        case 'verification':
+            if (data.order_id) {
+                // Could update verification details panel if it exists
+            }
+            break;
+
+        case 'decision':
+            if (data.decision) {
+                // Update final decision display
+                const decisionDisplay = document.getElementById('finalDecision');
+                if (decisionDisplay) {
+                    decisionDisplay.textContent = data.decision;
+                    decisionDisplay.className = `decision-value decision-${data.decision.toLowerCase()}`;
                 }
             }
-        },
-        {
-            name: 'defect',
-            duration: hasImages ? 2500 : 1000,
-            log: hasImages
-                ? '🔍 Analyzing defect images with Gemini Vision...'
-                : '🔍 Checking for defect images...',
-            onComplete: () => {
-                if (hasImages) {
-                    const images = scenario.attachments.filter(a =>
-                        a.mimeType && a.mimeType.startsWith('image/')
-                    );
-                    elements.defectAnalysis.innerHTML = `
-                        <div class="defect-result">
-                            <span class="defect-status">✓ ${images.length} image(s) analyzed</span>
-                            <span class="defect-detail">Defect confirmed - visible damage detected</span>
-                        </div>
-                    `;
-                } else {
-                    elements.defectAnalysis.innerHTML = `<span class="no-images-text">No defect images in this request</span>`;
-                }
-            }
-        },
-        {
-            name: 'extraction',
-            duration: 3000,
-            log: '🧠 Extracting structured data with Gemini 3...'
-        },
-        {
-            name: 'verification',
-            duration: 2500,
-            log: '🔐 Verifying order in database...'
-        },
-        {
-            name: 'adjudication',
-            duration: 3000,
-            log: '⚖️ Evaluating against return policy...'
-        },
-        {
-            name: 'decision',
-            duration: 1500,
-            log: '✅ Generating final decision...'
-        }
-    ];
-
-    for (let i = 0; i < steps.length; i++) {
-        const step = steps[i];
-        const stepElement = document.querySelector(`[data-step="${step.name}"]`);
-
-        // Set step as active
-        stepElement.classList.add('active');
-        stepElement.querySelector('.step-status').textContent = 'Processing...';
-        stepElement.querySelector('.step-status').className = 'step-status processing';
-
-        addLog('info', step.log);
-
-        // Wait for step duration
-        await sleep(step.duration);
-
-        // Call onComplete callback if exists
-        if (step.onComplete) {
-            step.onComplete();
-        }
-
-        // Mark step as completed
-        stepElement.classList.remove('active');
-        stepElement.classList.add('completed');
-        stepElement.querySelector('.step-status').textContent = 'Completed';
-        stepElement.querySelector('.step-status').className = 'step-status completed';
-
-        // Show step result
-        const resultElement = stepElement.querySelector('.step-result');
-        if (resultElement) {
-            resultElement.classList.remove('hidden');
-        }
-
-        // Add completion log
-        addLog('success', `✓ ${step.name.charAt(0).toUpperCase() + step.name.slice(1)} completed`);
+            break;
     }
-
-    // Pipeline complete
-    stopTimer();
-    state.isProcessing = false;
-
-    // Reset button
-    elements.submitBtn.querySelector('.btn-content').classList.remove('hidden');
-    elements.submitBtn.querySelector('.btn-loader').classList.add('hidden');
-    elements.submitBtn.disabled = false;
-
-    addLog('success', `🎉 Pipeline completed! ${state.selectedScenario.category} request APPROVED.`);
 }
 
 // ============================================

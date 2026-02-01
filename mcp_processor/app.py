@@ -1,7 +1,10 @@
 from fastapi import FastAPI, Request, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from processor import MCPProcessor
+from sse_starlette.sse import EventSourceResponse
 import os
+import json
 
 # Initialize Processor
 processor = MCPProcessor()
@@ -25,6 +28,15 @@ async def lifespan(app: FastAPI):
     await processor.cleanup()
 
 app = FastAPI(lifespan=lifespan)
+
+# CORS - Allow requests from any origin (for demo UI)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.post("/process")
 async def process_task(request: Request):
@@ -55,6 +67,46 @@ async def process_task(request: Request):
         # Return 500 to trigger Cloud Tasks retry
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/process-demo")
+async def process_demo(request: Request):
+    """
+    Demo endpoint for UI - accepts scenario JSON directly.
+    Returns Server-Sent Events for real-time progress updates.
+    
+    This is a NEW endpoint that doesn't affect existing Cloud Tasks flow.
+    """
+    try:
+        scenario_data = await request.json()
+        print(f"📥 Demo Request: {scenario_data.get('category', 'UNKNOWN')} from {scenario_data.get('user_id', 'N/A')}")
+        
+        async def event_generator():
+            try:
+                async for event in processor.process_demo_scenario(scenario_data):
+                    yield {
+                        "event": "progress",
+                        "data": json.dumps(event)
+                    }
+                # Send completion event
+                yield {
+                    "event": "complete",
+                    "data": json.dumps({"status": "complete"})
+                }
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                yield {
+                    "event": "error",
+                    "data": json.dumps({"error": str(e)})
+                }
+        
+        return EventSourceResponse(event_generator())
+        
+    except Exception as e:
+        print(f"❌ Error in demo endpoint: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/")
 async def health_check():
     return {"status": "healthy"}
@@ -63,3 +115,4 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8080))
     uvicorn.run(app, host="0.0.0.0", port=port)
+

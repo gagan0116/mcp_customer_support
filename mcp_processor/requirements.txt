@@ -9,3 +9,4 @@ python-dotenv
 pypdf
 Pillow
 neo4j>=5.0.0
+sse-starlette
