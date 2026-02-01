@@ -1,394 +1,73 @@
 /**
  * Customer Support AI Demo - Frontend Application
- * Simplified version with pre-defined demo scenarios
+ * Dynamically loads scenarios from /scenarios/*.json
  */
 
 // ============================================
-// Demo Scenarios Configuration
-// These will be loaded from /scenarios/*.json in the future
+// Demo Scenarios - Loaded dynamically
 // ============================================
-const demoScenarios = {
-    scenario1: {
-        category: "RETURN",
-        confidence: 0.99,
-        user_id: "kumar17.amara@gmail.com",
-        received_at: "2026-01-26T22:16:13+00:00",
-        email_body: `Hello,
+let demoScenarios = {};
 
-I am writing to request a return for my recent purchase from SuperStore.
+// ============================================
+// Load scenarios from JSON files
+// ============================================
+async function loadScenarios() {
+    const scenarioIds = ['scenario1', 'scenario2', 'scenario3', 'scenario4'];
 
-Order ID: MX-2012-TP2113082-41207
-Invoice Number: 5732
-Item: Apple Smart Phone, Full Size (Quantity: 5)
-Order Date: October 25, 2012
-
-I would like to initiate a return for the above item. Please let me know the return eligibility, next steps, and any instructions required to proceed, including the return shipping process.
-
-Thank you for your assistance. I look forward to your response.
-
-Best regards,
-Theone Pippenger`,
-        attachments: [
-            {
-                filename: "invoice_Theone_Pippenger_5732.pdf",
-                mimeType: "application/pdf",
-                path: "scenarios/scenario1/invoice_Theone_Pippenger_5732.pdf"
+    for (const id of scenarioIds) {
+        try {
+            const url = `scenarios/${id}/${id}.json`;
+            console.log(`Fetching: ${url}`);
+            const response = await fetch(url);
+            console.log(`Response for ${id}:`, response.status, response.statusText);
+            if (response.ok) {
+                const data = await response.json();
+                demoScenarios[id] = data;
+                console.log(`Loaded ${id}:`, data.category);
+            } else {
+                console.warn(`Failed to load ${id}: ${response.status}`);
             }
-        ],
-        // Mock extracted data for this scenario
-        extractedData: {
-            customer_email: "kumar17.amara@gmail.com",
-            full_name: "Theone Pippenger",
-            phone: null,
-            invoice_number: "5732",
-            order_invoice_id: "MX-2012-TP2113082-41207",
-            order_date: "2012-10-25",
-            return_request_date: "2026-01-26",
-            ship_mode: "Standard",
-            ship_city: "New York",
-            ship_state: "New York",
-            ship_country: "USA",
-            currency: "USD",
-            discount_amount: 0,
-            shipping_amount: 12.99,
-            total_amount: 549.95,
-            order_items: [
-                {
-                    sku: "APPLE-PHONE-FS",
-                    item_name: "Apple Smart Phone, Full Size",
-                    category: "Electronics",
-                    subcategory: "Smartphones",
-                    quantity: 5,
-                    unit_price: 107.99,
-                    line_total: 539.95
-                }
-            ],
-            item_condition: "UNOPENED",
-            return_category: "RETURN",
-            return_reason_category: "CHANGE_OF_MIND",
-            return_reason: "Customer requesting standard return",
-            confidence_score: 0.99
-        },
-        verifiedData: {
-            status: "verified",
-            data: {
-                customer: {
-                    customer_id: "CUST-2012-TP21130",
-                    customer_email: "kumar17.amara@gmail.com",
-                    full_name: "Theone Pippenger",
-                    verified: true
-                },
-                order_details: {
-                    order_id: "MX-2012-TP2113082-41207",
-                    order_date: "2012-10-25",
-                    total_amount: 549.95,
-                    status: "DELIVERED",
-                    delivery_date: "2012-10-30"
-                },
-                items: [
-                    {
-                        sku: "APPLE-PHONE-FS",
-                        item_name: "Apple Smart Phone, Full Size",
-                        quantity: 5,
-                        unit_price: 107.99
-                    }
-                ]
-            },
-            return_category: "RETURN",
-            confidence_score: 0.99
-        }
-    },
-    scenario2: {
-        category: "REFUND",
-        confidence: 0.97,
-        user_id: "sarah.johnson@gmail.com",
-        received_at: "2026-01-28T14:32:45+00:00",
-        email_body: `Dear Customer Support,
-
-I am requesting a full refund for my MacBook Pro purchase.
-
-Order Details:
-- Order ID: ORD-2026-SJ-78432
-- Invoice: INV-78432
-- Product: MacBook Pro 14" M3 Pro
-- Purchase Date: January 10, 2026
-- Amount: $1,999.00
-
-The laptop arrived with a defective display - there are visible dead pixels in the top right corner that appeared immediately upon first boot. I have documented this defect with photos attached.
-
-This is clearly a manufacturing defect and I would like a full refund processed as soon as possible.
-
-Thank you,
-Sarah Johnson`,
-        attachments: [
-            {
-                filename: "invoice_sarah_johnson_78432.pdf",
-                mimeType: "application/pdf",
-                path: "scenarios/scenario2/invoice_sarah_johnson_78432.pdf"
-            },
-            {
-                filename: "defect_photo_1.jpg",
-                mimeType: "image/jpeg",
-                path: "scenarios/scenario2/defect_photo_1.jpg"
-            }
-        ],
-        extractedData: {
-            customer_email: "sarah.johnson@gmail.com",
-            full_name: "Sarah Johnson",
-            phone: null,
-            invoice_number: "INV-78432",
-            order_invoice_id: "ORD-2026-SJ-78432",
-            order_date: "2026-01-10",
-            return_request_date: "2026-01-28",
-            ship_mode: "Express",
-            ship_city: "Los Angeles",
-            ship_state: "California",
-            ship_country: "USA",
-            currency: "USD",
-            discount_amount: 0,
-            shipping_amount: 0,
-            total_amount: 1999.00,
-            order_items: [
-                {
-                    sku: "MBP-14-M3P-512",
-                    item_name: "MacBook Pro 14\" M3 Pro",
-                    category: "Electronics",
-                    subcategory: "Laptops",
-                    quantity: 1,
-                    unit_price: 1999.00,
-                    line_total: 1999.00
-                }
-            ],
-            item_condition: "DAMAGED_DEFECTIVE",
-            return_category: "REFUND",
-            return_reason_category: "DEFECTIVE",
-            return_reason: "Display has visible dead pixels - manufacturing defect",
-            confidence_score: 0.97
-        },
-        verifiedData: {
-            status: "verified",
-            data: {
-                customer: {
-                    customer_id: "CUST-2026-SJ001",
-                    customer_email: "sarah.johnson@gmail.com",
-                    full_name: "Sarah Johnson",
-                    verified: true
-                },
-                order_details: {
-                    order_id: "ORD-2026-SJ-78432",
-                    order_date: "2026-01-10",
-                    total_amount: 1999.00,
-                    status: "DELIVERED",
-                    delivery_date: "2026-01-12"
-                },
-                items: [
-                    {
-                        sku: "MBP-14-M3P-512",
-                        item_name: "MacBook Pro 14\" M3 Pro",
-                        quantity: 1,
-                        unit_price: 1999.00
-                    }
-                ]
-            },
-            return_category: "REFUND",
-            defect_confirmed: true,
-            confidence_score: 0.97
-        }
-    },
-    scenario3: {
-        category: "REPLACEMENT",
-        confidence: 0.95,
-        user_id: "alex.chen@outlook.com",
-        received_at: "2026-01-29T09:15:22+00:00",
-        email_body: `Hello Support Team,
-
-I need a replacement for my AirPods Pro that I purchased last week.
-
-Order Information:
-- Order #: ORD-2026-AC-55123
-- Invoice #: INV-55123
-- Product: AirPods Pro (2nd Generation)
-- Price: $249.00
-
-The left earbud is not producing any sound. I've tried resetting them multiple times and checked for firmware updates, but nothing works. The right earbud works perfectly fine.
-
-Could you please send a replacement unit? I've attached my invoice for reference.
-
-Best regards,
-Alex Chen`,
-        attachments: [
-            {
-                filename: "invoice_alex_chen_55123.pdf",
-                mimeType: "application/pdf",
-                path: "scenarios/scenario3/invoice_alex_chen_55123.pdf"
-            }
-        ],
-        extractedData: {
-            customer_email: "alex.chen@outlook.com",
-            full_name: "Alex Chen",
-            phone: null,
-            invoice_number: "INV-55123",
-            order_invoice_id: "ORD-2026-AC-55123",
-            order_date: "2026-01-22",
-            return_request_date: "2026-01-29",
-            ship_mode: "Standard",
-            ship_city: "Seattle",
-            ship_state: "Washington",
-            ship_country: "USA",
-            currency: "USD",
-            discount_amount: 0,
-            shipping_amount: 0,
-            total_amount: 249.00,
-            order_items: [
-                {
-                    sku: "APP-2ND-GEN",
-                    item_name: "AirPods Pro (2nd Generation)",
-                    category: "Electronics",
-                    subcategory: "Audio",
-                    quantity: 1,
-                    unit_price: 249.00,
-                    line_total: 249.00
-                }
-            ],
-            item_condition: "DAMAGED_DEFECTIVE",
-            return_category: "REPLACEMENT",
-            return_reason_category: "DEFECTIVE",
-            return_reason: "Left earbud not producing sound - hardware malfunction",
-            confidence_score: 0.95
-        },
-        verifiedData: {
-            status: "verified",
-            data: {
-                customer: {
-                    customer_id: "CUST-2026-AC001",
-                    customer_email: "alex.chen@outlook.com",
-                    full_name: "Alex Chen",
-                    verified: true
-                },
-                order_details: {
-                    order_id: "ORD-2026-AC-55123",
-                    order_date: "2026-01-22",
-                    total_amount: 249.00,
-                    status: "DELIVERED",
-                    delivery_date: "2026-01-25"
-                },
-                items: [
-                    {
-                        sku: "APP-2ND-GEN",
-                        item_name: "AirPods Pro (2nd Generation)",
-                        quantity: 1,
-                        unit_price: 249.00
-                    }
-                ]
-            },
-            return_category: "REPLACEMENT",
-            confidence_score: 0.95
-        }
-    },
-    scenario4: {
-        category: "RETURN",
-        confidence: 0.98,
-        user_id: "maria.garcia@yahoo.com",
-        received_at: "2026-01-30T16:45:00+00:00",
-        email_body: `Hi,
-
-I'm writing to return my iPad Pro which has a cracked screen.
-
-Details:
-- Order Number: ORD-2026-MG-99012
-- Invoice: INV-99012
-- Item: iPad Pro 12.9" (6th Gen) - 256GB
-- Purchase Date: January 5, 2026
-
-The screen cracked during normal use - I was simply holding it when I noticed a crack spreading from the corner. This must be a manufacturing defect as I always use a protective case.
-
-I've included photos showing the crack and my original invoice.
-
-Please process this return at your earliest convenience.
-
-Thank you,
-Maria Garcia`,
-        attachments: [
-            {
-                filename: "invoice_maria_garcia_99012.pdf",
-                mimeType: "application/pdf",
-                path: "scenarios/scenario4/invoice_maria_garcia_99012.pdf"
-            },
-            {
-                filename: "cracked_screen.jpg",
-                mimeType: "image/jpeg",
-                path: "scenarios/scenario4/cracked_screen.jpg"
-            },
-            {
-                filename: "cracked_screen_2.jpg",
-                mimeType: "image/jpeg",
-                path: "scenarios/scenario4/cracked_screen_2.jpg"
-            }
-        ],
-        extractedData: {
-            customer_email: "maria.garcia@yahoo.com",
-            full_name: "Maria Garcia",
-            phone: null,
-            invoice_number: "INV-99012",
-            order_invoice_id: "ORD-2026-MG-99012",
-            order_date: "2026-01-05",
-            return_request_date: "2026-01-30",
-            ship_mode: "Express",
-            ship_city: "Miami",
-            ship_state: "Florida",
-            ship_country: "USA",
-            currency: "USD",
-            discount_amount: 50.00,
-            shipping_amount: 0,
-            total_amount: 1049.00,
-            order_items: [
-                {
-                    sku: "IPAD-PRO-129-256",
-                    item_name: "iPad Pro 12.9\" (6th Gen) - 256GB",
-                    category: "Electronics",
-                    subcategory: "Tablets",
-                    quantity: 1,
-                    unit_price: 1099.00,
-                    line_total: 1049.00
-                }
-            ],
-            item_condition: "DAMAGED_DEFECTIVE",
-            return_category: "RETURN",
-            return_reason_category: "DEFECTIVE",
-            return_reason: "Screen cracked during normal use - potential manufacturing defect",
-            confidence_score: 0.98
-        },
-        verifiedData: {
-            status: "verified",
-            data: {
-                customer: {
-                    customer_id: "CUST-2026-MG001",
-                    customer_email: "maria.garcia@yahoo.com",
-                    full_name: "Maria Garcia",
-                    verified: true
-                },
-                order_details: {
-                    order_id: "ORD-2026-MG-99012",
-                    order_date: "2026-01-05",
-                    total_amount: 1049.00,
-                    status: "DELIVERED",
-                    delivery_date: "2026-01-08"
-                },
-                items: [
-                    {
-                        sku: "IPAD-PRO-129-256",
-                        item_name: "iPad Pro 12.9\" (6th Gen) - 256GB",
-                        quantity: 1,
-                        unit_price: 1099.00
-                    }
-                ]
-            },
-            return_category: "RETURN",
-            defect_images_analyzed: true,
-            confidence_score: 0.98
+        } catch (error) {
+            console.warn(`Error loading ${id}:`, error);
         }
     }
-};
+
+    return demoScenarios;
+}
+
+// ============================================
+// Populate dropdown with loaded scenarios
+// ============================================
+function populateScenarioDropdown() {
+    const select = document.getElementById('scenarioSelect');
+    if (!select) return;
+
+    // Clear existing options except the first placeholder
+    while (select.options.length > 1) {
+        select.remove(1);
+    }
+
+    // Add options for each loaded scenario
+    for (const [id, scenario] of Object.entries(demoScenarios)) {
+        const option = document.createElement('option');
+        option.value = id;
+
+        // Create a descriptive label based on scenario data
+        const categoryEmoji = {
+            'RETURN': '📦',
+            'REFUND': '💰',
+            'REPLACEMENT': '🔄'
+        };
+        const emoji = categoryEmoji[scenario.category] || '📧';
+        // Use date in label instead of email (PII)
+        const dateStr = new Date(scenario.received_at).toLocaleDateString();
+        option.textContent = `${emoji} ${scenario.category} Request (${dateStr})`;
+
+        select.appendChild(option);
+    }
+
+    console.log(`Populated dropdown with ${Object.keys(demoScenarios).length} scenarios`);
+}
 
 // ============================================
 // State Management
@@ -522,8 +201,8 @@ function populateEmailPreview(scenario) {
     elements.categoryBadge.textContent = scenario.category;
     elements.categoryBadge.className = `category-badge ${scenario.category.toLowerCase()}`;
 
-    // From email
-    elements.fromEmail.textContent = scenario.user_id;
+    // From email - HIDDEN for PII
+    // elements.fromEmail.textContent = scenario.user_id;
 
     // Received timestamp
     const receivedDate = new Date(scenario.received_at);
@@ -541,8 +220,25 @@ function populateEmailPreview(scenario) {
     elements.confidenceFill.style.width = `${confidencePercent}%`;
     elements.confidenceValue.textContent = `${confidencePercent}%`;
 
-    // Email body
-    elements.emailBody.textContent = scenario.email_body;
+    // Email body - clean up the duplicated text if present
+    let emailText = scenario.email_body || '';
+
+    // The email_body often has duplicate content (formatted + plain text concatenated)
+    // Look for the signature pattern and take content up to and including first signature
+    const signatureMatch = emailText.match(/Best regards,[\r\n]+[A-Za-z\s]+/);
+    if (signatureMatch) {
+        const firstSignatureEnd = emailText.indexOf(signatureMatch[0]) + signatureMatch[0].length;
+        // Check if there's substantial content after the signature (indicating duplication)
+        const afterSignature = emailText.substring(firstSignatureEnd).trim();
+        if (afterSignature.length > 50) {
+            // There's duplicated content after - truncate to just the formatted part
+            emailText = emailText.substring(0, firstSignatureEnd);
+        }
+    }
+
+    // Clean up extra whitespace
+    emailText = emailText.replace(/(\r\n){3,}/g, '\r\n\r\n').trim();
+    elements.emailBody.textContent = emailText;
 
     // Attachments
     renderAttachments(scenario.attachments);
@@ -570,13 +266,46 @@ function renderAttachments(attachments) {
                 <polyline points="21 15 16 10 5 21"/>
                </svg>`;
 
+        // Create Blob URL for base64 data
+        let fileUrl = '#';
+        if (att.data && att.data.__type__ === 'bytes' && att.data.encoding === 'base64') {
+            try {
+                const blob = base64ToBlob(att.data.data, att.mimeType);
+                fileUrl = URL.createObjectURL(blob);
+            } catch (e) {
+                console.error('Error creating blob for attachment:', e);
+            }
+        } else if (att.path) {
+            fileUrl = att.path;
+        }
+
         return `
-            <a href="${att.path}" target="_blank" class="attachment-chip" title="Open in new tab">
+            <a href="${fileUrl}" target="_blank" class="attachment-chip" title="Open in new tab">
                 <span class="${iconClass}">${iconSvg}</span>
                 <span>${att.filename}</span>
             </a>
         `;
     }).join('');
+}
+
+// Helper to convert base64 to Blob
+function base64ToBlob(base64, mimeType) {
+    const byteCharacters = atob(base64);
+    const byteArrays = [];
+
+    for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+        const slice = byteCharacters.slice(offset, offset + 512);
+        const byteNumbers = new Array(slice.length);
+
+        for (let i = 0; i < slice.length; i++) {
+            byteNumbers[i] = slice.charCodeAt(i);
+        }
+
+        const byteArray = new Uint8Array(byteNumbers);
+        byteArrays.push(byteArray);
+    }
+
+    return new Blob(byteArrays, { type: mimeType });
 }
 
 async function handleSubmit() {
@@ -602,8 +331,12 @@ async function handleSubmit() {
 
 async function runPipeline() {
     const scenario = state.selectedScenario;
-    const hasImages = scenario.attachments.some(a => a.mimeType.startsWith('image/'));
-    const hasPdfs = scenario.attachments.some(a => a.mimeType === 'application/pdf');
+    const hasImages = scenario.attachments && scenario.attachments.some(a =>
+        a.mimeType && a.mimeType.startsWith('image/')
+    );
+    const hasPdfs = scenario.attachments && scenario.attachments.some(a =>
+        a.mimeType === 'application/pdf'
+    );
 
     const steps = [
         {
@@ -648,7 +381,9 @@ async function runPipeline() {
                 : '🔍 Checking for defect images...',
             onComplete: () => {
                 if (hasImages) {
-                    const images = scenario.attachments.filter(a => a.mimeType.startsWith('image/'));
+                    const images = scenario.attachments.filter(a =>
+                        a.mimeType && a.mimeType.startsWith('image/')
+                    );
                     elements.defectAnalysis.innerHTML = `
                         <div class="defect-result">
                             <span class="defect-status">✓ ${images.length} image(s) analyzed</span>
@@ -785,10 +520,36 @@ function addLog(type, message) {
 function handleViewJson(type) {
     if (!state.selectedScenario) return;
 
-    const data = type === 'extracted'
-        ? state.selectedScenario.extractedData
-        : state.selectedScenario.verifiedData;
-    const title = type === 'extracted' ? 'Extracted Order Data' : 'Verified Order Data';
+    // For scenarios loaded from JSON, show the raw scenario data
+    let data;
+    let title;
+
+    if (type === 'extracted') {
+        // Show the email classification/extraction data
+        data = {
+            category: state.selectedScenario.category,
+            confidence: state.selectedScenario.confidence,
+            user_id: state.selectedScenario.user_id,
+            received_at: state.selectedScenario.received_at,
+            email_body: state.selectedScenario.email_body,
+            attachments: state.selectedScenario.attachments ?
+                state.selectedScenario.attachments.map(a => ({
+                    filename: a.filename,
+                    mimeType: a.mimeType
+                })) : []
+        };
+        title = 'Extracted Email Data';
+    } else {
+        // Show verification status (mock for demo)
+        data = {
+            status: 'verified',
+            category: state.selectedScenario.category,
+            confidence: state.selectedScenario.confidence,
+            user_id: state.selectedScenario.user_id,
+            received_at: state.selectedScenario.received_at
+        };
+        title = 'Verified Order Data';
+    }
 
     elements.modalTitle.textContent = title;
     elements.jsonContent.querySelector('code').textContent = JSON.stringify(data, null, 2);
@@ -844,11 +605,18 @@ function sleep(ms) {
 // ============================================
 // Initialize Application
 // ============================================
-function init() {
-    initializeEventListeners();
+async function init() {
+    // Load scenarios from JSON files
+    console.log('Initializing app...');
+    await loadScenarios();
 
-    // Clear logs and add initial message
-    elements.logsContainer.innerHTML = '';
+    // Populate dropdown with loaded scenarios
+    populateScenarioDropdown();
+
+    const loadedCount = Object.keys(demoScenarios).length;
+    console.log(`Loaded ${loadedCount} scenarios total`);
+
+    initializeEventListeners();
     addLog('info', 'System initialized. Select a demo scenario to begin...');
 }
 
