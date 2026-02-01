@@ -292,7 +292,7 @@ Extract all order and customer details from the text above."""
 
         try:
             response = await self.generate_with_retry(
-                model='gemini-2.0-flash', # Using flash for speed/cost, pro availability
+                model='gemini-3-pro-preview',
                 contents=prompt,
                 config={
                     "response_mime_type": "application/json",
@@ -304,12 +304,18 @@ Extract all order and customer details from the text above."""
             return f"error: LLM Extraction failed: {str(e)}"
 
     async def verify_request_with_db(self, extracted_data):
+        """
+        Agentic verification flow loops using Gemini to interpret tool outputs and decide next steps.
+        """
         db_session = self.sessions.get("db_verification")
         if not db_session:
             print("❌ Error: db_verification session not available.")
-            return
+            return None
 
-        print("Starting DB Verification Agent Loop...")
+        print("\n" + "="*40)
+        print("DATABASE VERIFICATION (AGENT LOOP)")
+        print("="*40)
+
         tools_response = await db_session.list_tools()
         tools_map = {t.name: t for t in tools_response.tools}
         tools_desc = []
@@ -321,61 +327,116 @@ Extract all order and customer details from the text above."""
             })
 
         messages = [
-            """You are an expert DB Verification Agent. Your goal is to verify a customer refund request.
-            STRICT VERIFICATION PROCESS:
-            1. IDENTITY CHECK: Call 'verify_from_email_matches_customer'. If false, call llm_find_orders then terminate.
-            2. FIND ORDER: 
-               - Try 'find_order_by_order_invoice_id'.
-               - Try 'find_order_by_invoice_number'.
-               - Try 'get_customer_orders_with_items' then 'select_order_id'.
-               - Try 'llm_find_orders'.
-            3. REPORT:
-               - If found, output "Verification Successful" and include full order JSON in 'verified_data'.
-               - If stuck, output "Sending for Human Review".
+    """
+            You are an expert DB Verification Agent. Your goal is to verify a customer refund request.
             
-            Output JSON ONLY: { "tool_name": "...", "arguments": { ... } }
-            Or if done: { "action": "terminate", "reason": "...", "verified_data": object|null }
+            STRICT VERIFICATION PROCESS (Follow in order):
+            
+            STEP 1: IDENTITY CHECK
+            - Call 'verify_from_email_matches_customer' with the customer_email.
+            - IF 'matched' is False: Call llm_find_orders. Output "Request sent for Human Review" and terminate.
+            - IF 'matched' is True: Proceed to Step 2.
+            
+            STEP 2: FIND ORDER (Hierarchical Search)
+            - ATTEMPT 1: If 'order_invoice_id' exists in data, call 'find_order_by_order_invoice_id'.
+              - If found, you are DONE. Return the order details.
+            - ATTEMPT 2: If finding by ID failed or ID was missing, check if 'invoice_number' exists in data.
+              - If yes, call 'find_order_by_invoice_number'.
+              - If found, you are DONE.
+            - ATTEMPT 3: If specific searches fail, call 'get_customer_orders_with_items' to get a list of recent orders.
+              - Then immediately call 'select_order_id' passing that usage data to pick the best one.
+              - If a 'selected_order_id' is returned, specific logic to confirm it? No, just accept the selection.
+            - ATTEMPT 4: If all else fails, call 'llm_find_orders' to search via SQL.
+            
+            STEP 3: REPORT
+            - If an order is found in any step, output "Verification Successful" and ensure you copy the full order JSON into 'verified_data'.
+            - If completely stuck after all attempts, output "Sending for Human Review".
+            
+            INSTRUCTIONS:
+            - Decide the NEXT SINGLE Action.
+            - Output JSON ONLY: { "tool_name": "...", "arguments": { ... } }
+            - If you are done or need to stop, output JSON: { "action": "terminate", "reason": "...", "verified_data": object|null }
+              (If verification was successful, you MUST include the full retrieved order details in the 'verified_data' field).
             """
-        ]
+]
         context_str = f"EXTRACTED DATA:\n{json.dumps(extracted_data, indent=2)}\n\nAVAILABLE TOOLS:\n{json.dumps(tools_desc)}"
         messages.append(context_str)
 
         max_turns = 8
+        fuzzy_tools_used = []  # Track if llm_find_orders or select_order_id were used
         for i in range(max_turns):
-            print(f"--- Turn {i+1} ---")
-            await asyncio.sleep(1) # Slight pause
+            print(f"\n--- Turn {i+1} ---")
+            
+            # Rate limiting sleep
+            await asyncio.sleep(2)
             
             prompt_content = "\n".join(messages) + "\n\nWhat is the next step? Output valid JSON only."
+            
             try:
                 response = await self.generate_with_retry(
-                    model='gemini-2.0-flash',
+                    model='gemini-2.5-flash', 
                     contents=prompt_content,
                     config={"response_mime_type": "application/json"}
                 )
+                
                 decision_text = response.text
-                if not decision_text: continue
                 
-                decision = json.loads(decision_text)
+                # Handle None or empty response from Gemini
+                if decision_text is None or decision_text.strip() == "":
+                    print(f"⚠️ Empty response from LLM on turn {i+1}. Retrying...")
+                    messages.append("System: Your previous response was empty. Please provide a valid JSON response.")
+                    continue
                 
-                if decision.get("action") == "terminate":
-                    print(f"Agent Finished: {decision.get('reason')}")
-                    return decision.get("verified_data")
+                print(f"🤖 Agent thought: {decision_text}")
+                
+                try:
+                    decision = json.loads(decision_text)
+                except json.JSONDecodeError as json_err:
+                    print(f"⚠️ Failed to parse JSON response: {json_err}")
+                    messages.append(f"System: Your response was not valid JSON. Error: {json_err}. Please output valid JSON only.")
+                    continue
+
+                if "action" in decision and decision["action"] == "terminate":
+                    print(f"🏁 Agent Finished: {decision.get('reason')}")
+                    return {
+                        "verified_data": decision.get("verified_data"),
+                        "fuzzy_tools_used": fuzzy_tools_used
+                    }
                 
                 tool_name = decision.get("tool_name")
                 args = decision.get("arguments", {})
                 
+                if not tool_name:
+                    print(f"⚠️ Invalid decision format. Stopping.")
+                    break
+
+                # Validations before calling
                 if tool_name not in tools_map:
-                    messages.append(f"System: Tool {tool_name} does not exist.")
+                    print(f"❌ Error: Tool {tool_name} not found.")
+                    messages.append(f"System: Tool {tool_name} does not exist. Choose from available tools.")
                     continue
+
+                # Execute Tool
+                print(f"▶️ Executing: {tool_name}...")
                 
-                print(f"Executing: {tool_name}...")
+                # Track fuzzy matching tools
+                if tool_name in ["llm_find_orders", "select_order_id"]:
+                    fuzzy_tools_used.append(tool_name)
+                
                 result = await db_session.call_tool(tool_name, arguments=args)
-                tool_output = result.content[0].text
+                tool_output_str = result.content[0].text
                 
-                messages.append(f"Tool '{tool_name}' Result:\n{tool_output}")
+                # Print snippet for user
+                display_output = tool_output_str[:500] + "..." if len(tool_output_str) > 500 else tool_output_str
+                print(f"📄 Output: {display_output}")
+                
+                # Feed result back to context
+                messages.append(f"Tool '{tool_name}' Result:\n{tool_output_str}")
+                
             except Exception as e:
-                print(f"Error in Agent Loop: {e}")
+                print(f"❌ Error in Agent Loop: {e}")
                 break
+        
         return None
 
     async def process_single_email(self, bucket, blob_path):
@@ -447,28 +508,59 @@ Extract all order and customer details from the text above."""
             extracted_data = {}
         
         # Verify
-        verified_record = await self.verify_request_with_db(extracted_data)
+        verification_result = await self.verify_request_with_db(extracted_data)
+        
+        # Extract verified data and fuzzy tools info from result
+        verified_record = None
+        fuzzy_tools_used = []
+        
+        if verification_result:
+            verified_record = verification_result.get("verified_data")
+            fuzzy_tools_used = verification_result.get("fuzzy_tools_used", [])
         
         # Adjudicate
         adjudication_result = None
         if verified_record:
-            # Merge fields
-            for k in ["return_request_date", "return_category", "return_reason", "item_condition"]:
-                verified_record[k] = extracted_data.get(k)
+            # Merge extracted intent fields into verified record
+            verified_record["return_request_date"] = extracted_data.get("return_request_date")
+            verified_record["return_category"] = extracted_data.get("return_category")
+            verified_record["return_reason_category"] = extracted_data.get("return_reason_category")
+            verified_record["return_reason"] = extracted_data.get("return_reason")
+            verified_record["item_condition"] = extracted_data.get("item_condition")
+            verified_record["confidence_score"] = extracted_data.get("confidence_score")
             
+            # Check if fuzzy matching tools were used - requires human review
+            if fuzzy_tools_used:
+                print(f"\n⚠️ HUMAN REVIEW REQUIRED")
+                print(f"   Order was found using: {fuzzy_tools_used}")
+                print(f"   Verified order saved. Skipping automatic adjudication.")
+                
+                # Insert refund case with pending human review status
+                self.insert_refund_case(
+                    email_data=data,
+                    extracted_data=extracted_data,
+                    verified_record=verified_record,
+                    adjudication_result=None  # No adjudication - needs human review
+                )
+                print("Processing Complete.")
+                return
+            
+            # --- Adjudication (only if exact match was found) ---
             try:
+                print("\n" + "="*50)
                 print("RUNNING ADJUDICATOR AGENT")
+                print("="*50)
                 adjudicator = Adjudicator()
                 adjudication_result = await adjudicator.adjudicate(verified_record)
                 
-                print(f"DECISION: {adjudication_result.get('decision', 'UNKNOWN')}")
+                print(f"\nDECISION: {adjudication_result.get('decision', 'UNKNOWN')}")
                 print(f"REASON: {adjudication_result.get('details', {}).get('reasoning', 'N/A')}")
                 
             except Exception as e:
                 print(f"⚠️ Adjudication failed: {e}")
                 import traceback
                 traceback.print_exc()
-                # Adjudication result remains None, so we proceed to insert without it, same as client.py
+                # Adjudication result remains None
         
         else:
             print("ℹ️ No verified order data was returned. Marking as PENDING_REVIEW.")
