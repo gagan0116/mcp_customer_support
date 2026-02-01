@@ -17,18 +17,13 @@ async function loadScenarios() {
     for (const id of scenarioIds) {
         try {
             const url = `scenarios/${id}/${id}.json`;
-            console.log(`Fetching: ${url}`);
             const response = await fetch(url);
-            console.log(`Response for ${id}:`, response.status, response.statusText);
             if (response.ok) {
                 const data = await response.json();
                 demoScenarios[id] = data;
-                console.log(`Loaded ${id}:`, data.category);
-            } else {
-                console.warn(`Failed to load ${id}: ${response.status}`);
             }
         } catch (error) {
-            console.warn(`Error loading ${id}:`, error);
+            // Silently skip failed scenario loads
         }
     }
 
@@ -65,8 +60,6 @@ function populateScenarioDropdown() {
 
         select.appendChild(option);
     }
-
-    console.log(`Populated dropdown with ${Object.keys(demoScenarios).length} scenarios`);
 }
 
 // ============================================
@@ -91,7 +84,6 @@ const elements = {
     emailPreview: document.getElementById('emailPreview'),
     emptyState: document.getElementById('emptyState'),
     categoryBadge: document.getElementById('categoryBadge'),
-    fromEmail: document.getElementById('fromEmail'),
     receivedAt: document.getElementById('receivedAt'),
     confidenceFill: document.getElementById('confidenceFill'),
     confidenceValue: document.getElementById('confidenceValue'),
@@ -200,9 +192,6 @@ function populateEmailPreview(scenario) {
     // Category badge
     elements.categoryBadge.textContent = scenario.category;
     elements.categoryBadge.className = `category-badge ${scenario.category.toLowerCase()}`;
-
-    // From email - HIDDEN for PII
-    // elements.fromEmail.textContent = scenario.user_id;
 
     // Received timestamp
     const receivedDate = new Date(scenario.received_at);
@@ -607,14 +596,10 @@ function sleep(ms) {
 // ============================================
 async function init() {
     // Load scenarios from JSON files
-    console.log('Initializing app...');
     await loadScenarios();
 
     // Populate dropdown with loaded scenarios
     populateScenarioDropdown();
-
-    const loadedCount = Object.keys(demoScenarios).length;
-    console.log(`Loaded ${loadedCount} scenarios total`);
 
     initializeEventListeners();
     addLog('info', 'System initialized. Select a demo scenario to begin...');
