@@ -33,7 +33,9 @@ steps:
         "managed",
         "--allow-unauthenticated",
         "--service-account",
-        "mcp-runtime@vara-483300.iam.gserviceaccount.com"
+        "mcp-runtime@vara-483300.iam.gserviceaccount.com",
+        "--set-env-vars",
+        "MCP_QUEUE_NAME=mcp-processing-queue,MCP_PROCESSOR_URL=https://mcp-processor-bq657sjnfq-nn.a.run.app/process"
       ]
 
 options:

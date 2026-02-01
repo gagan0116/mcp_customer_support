@@ -7,3 +7,4 @@ google-cloud-firestore
 google-generativeai
 beautifulsoup4
 google-cloud-storage
+google-cloud-tasks
