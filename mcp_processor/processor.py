@@ -17,13 +17,9 @@ from google.genai import types
 # Load environment variables
 load_dotenv()
 
-# Define Project Root
-# In Docker, this will be /app (where this script is).
-# Locally, it might be mcp_processor, so we need to go up one level if testing locally.
+
 current_dir = os.path.dirname(os.path.abspath(__file__))
-# If we are in mcp_processor subdir locally, project root is parent. 
-# But in Docker, we copy files to root /app. 
-# Let's rely on an env var or default to current dir.
+
 PROJECT_ROOT = os.getenv("PROJECT_ROOT", current_dir)
 sys.path.append(PROJECT_ROOT)
 
@@ -57,10 +53,14 @@ def download_blob(bucket_name, source_blob_name, destination_file_name):
     blob.download_to_filename(destination_file_name)
     print(f"Downloaded {source_blob_name} to {destination_file_name}")
 
+import random
+
 class MCPProcessor:
     def __init__(self):
         self.exit_stack = AsyncExitStack()
         self.sessions: Dict[str, ClientSession] = {}
+        # Semaphore to limit concurrent Gemini API calls (prevents 429 errors)
+        self.sem = asyncio.Semaphore(5)
         
         # Configuration for MCP servers
         # We assume the server scripts are copied to the container root
@@ -82,27 +82,33 @@ class MCPProcessor:
             }
         }
     
-    async def generate_with_retry(self, model, contents, config=None, max_retries=5):
+    async def generate_with_retry(self, model, contents, config=None, max_retries=10):
+        """
+        Generate content with retry logic, rate limiting, and exponential backoff with jitter.
+        """
         if not gemini_client:
              raise Exception("Gemini Client not initialized")
              
         base_delay = 2
-        for attempt in range(max_retries):
-            try:
-                response = gemini_client.models.generate_content(
-                    model=model,
-                    contents=contents,
-                    config=config
-                )
-                return response
-            except Exception as e:
-                error_str = str(e)
-                if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
-                    delay = base_delay * (2 ** attempt)
-                    print(f"⚠️ Quota exceeded (429). Retrying in {delay}s...")
-                    await asyncio.sleep(delay)
-                else:
-                    raise e
+        async with self.sem:  # Limit concurrent API calls
+            for attempt in range(max_retries):
+                try:
+                    # Use async client to avoid blocking the event loop
+                    response = await gemini_client.aio.models.generate_content(
+                        model=model,
+                        contents=contents,
+                        config=config
+                    )
+                    return response
+                except Exception as e:
+                    error_str = str(e)
+                    if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+                        # Exponential backoff with jitter to prevent thundering herd
+                        delay = base_delay * (2 ** attempt) + random.uniform(0, 1)
+                        print(f"⚠️ Quota exceeded (429). Retrying in {delay:.2f}s... (attempt {attempt + 1}/{max_retries})")
+                        await asyncio.sleep(delay)
+                    else:
+                        raise e
         raise Exception(f"Failed after {max_retries} retries due to quota exhaustion.")
 
     def insert_refund_case(self, email_data, extracted_data, verified_record, adjudication_result=None):
@@ -964,7 +970,7 @@ Extract all order and customer details from the text above."""
                 
                 # Insert refund case with pending human review status (same as process_single_email)
                 self.insert_refund_case(
-                    email_data=email_data,
+                    email_data=data,
                     extracted_data=extracted_data,
                     verified_record=verified_record,
                     adjudication_result=None  # No adjudication - needs human review
@@ -1020,7 +1026,7 @@ Extract all order and customer details from the text above."""
 
                 # Insert to DB (same as process_single_email)
                 self.insert_refund_case(
-                    email_data=email_data,
+                    email_data=data,
                     extracted_data=extracted_data,
                     verified_record=verified_record,
                     adjudication_result=adjudication_result
@@ -1046,7 +1052,7 @@ Extract all order and customer details from the text above."""
             
             # Insert to DB with no verified record (same as process_single_email)
             self.insert_refund_case(
-                email_data=email_data,
+                email_data=data,
                 extracted_data=extracted_data,
                 verified_record=None,
                 adjudication_result=None

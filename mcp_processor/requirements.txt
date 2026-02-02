@@ -2,7 +2,7 @@ fastapi>=0.115.0
 uvicorn[standard]>=0.34.0
 mcp[cli]
 google-cloud-storage
-google-cloud-sql-connector
+cloud-sql-python-connector
 pg8000
 google-genai
 python-dotenv
