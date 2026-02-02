@@ -22,6 +22,7 @@ COPY defect_analyzer ./defect_analyzer
 COPY db_verification ./db_verification
 COPY policy_compiler_agents ./policy_compiler_agents
 COPY neo4j_graph_engine ./neo4j_graph_engine
+COPY policy_docs ./policy_docs
 
 # Set PYTHONPATH to include /app
 ENV PYTHONPATH=/app
