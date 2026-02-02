@@ -68,7 +68,7 @@ class MCPProcessor:
             "doc_server": {
                 "command": sys.executable,
                 "args": [os.path.join(PROJECT_ROOT, "doc_server", "mcp_doc_server.py")],
-                "env": None
+                "env": os.environ.copy()  # Inherit all env vars including GEMINI_API_KEY
             },
             "db_verification": {
                 "command": sys.executable,
@@ -78,7 +78,7 @@ class MCPProcessor:
             "defect_analyzer": {
                 "command": sys.executable,
                 "args": [os.path.join(PROJECT_ROOT, "defect_analyzer", "mcp_server.py")],
-                "env": None
+                "env": os.environ.copy()  # Inherit all env vars including GEMINI_API_KEY
             }
         }
     
