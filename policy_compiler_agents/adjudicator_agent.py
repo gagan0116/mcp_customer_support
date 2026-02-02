@@ -641,6 +641,165 @@ class AdjudicatorV2:
         print("="*60)
         
         return output
+    
+    # =========================================================================
+    # STREAMING ORCHESTRATOR (for UI real-time updates)
+    # =========================================================================
+    async def adjudicate_streaming(self, verified_order: Dict[str, Any], user_request: Dict[str, Any] = None):
+        """
+        Streaming version of adjudicate() that yields events at each sub-step.
+        Used by the demo UI to show real-time progress.
+        
+        Yields dict events: {"substep": str, "status": str, "log": str, "data": dict}
+        Final yield has substep="FINAL" with complete result.
+        """
+        user_request = user_request or {}
+        
+        print("\n" + "="*60)
+        print("ADJUDICATOR AGENT v2.0 - Policy Decision Engine (STREAMING)")
+        print("="*60)
+        
+        # =====================================================================
+        # SUBSTEP 1: Build Context
+        # =====================================================================
+        yield {"substep": "context", "status": "active", "log": "Building order context...", "data": None}
+        
+        context = self.build_context(verified_order, user_request)
+        
+        # Normalize condition
+        normalized_condition, is_match = normalize_condition(context["item_condition"])
+        context["normalized_condition"] = normalized_condition
+        context["condition_matched"] = is_match
+        
+        print(f"   [CONTEXT] Order ID: {context['order_id']}")
+        print(f"   [CONTEXT] Days: {context['days_since_delivery']}, Tier: {context['membership_tier']}")
+        
+        yield {
+            "substep": "context", 
+            "status": "complete", 
+            "log": f"Order #{context['order_id']}, {context['days_since_delivery']} days, {context['membership_tier']}", 
+            "data": {
+                "order_id": context["order_id"],
+                "days_since_delivery": context["days_since_delivery"],
+                "membership_tier": context["membership_tier"],
+                "item_condition": context["item_condition"]
+            }
+        }
+        
+        # =====================================================================
+        # SUBSTEP 2: Classify Category
+        # =====================================================================
+        yield {"substep": "classify", "status": "active", "log": "Classifying product category...", "data": None}
+        
+        primary_item = context["items"][0] if context["items"] else {"item_name": "Unknown"}
+        item_name = primary_item.get("item_name", "Unknown")
+        
+        print(f"   [CLASSIFY] Classifying: {item_name}")
+        mapped_category = await self.classify_category(primary_item)
+        context["mapped_category"] = mapped_category
+        
+        yield {
+            "substep": "classify", 
+            "status": "complete", 
+            "log": f"{mapped_category}", 
+            "data": {"category": mapped_category, "item_name": item_name}
+        }
+        
+        # =====================================================================
+        # SUBSTEP 3: Graph Traversal
+        # =====================================================================
+        yield {"substep": "graph", "status": "active", "log": f"Traversing policy graph from '{mapped_category}'...", "data": None}
+        
+        print(f"   [GRAPH] Traversing from: {mapped_category}")
+        traversal_result = await traverse_from_category(mapped_category)
+        policy_profile = build_policy_profile(traversal_result)
+        
+        num_rules = len(policy_profile.get("windows", [])) + len(policy_profile.get("fees", [])) + len(policy_profile.get("restrictions", []))
+        
+        yield {
+            "substep": "graph", 
+            "status": "complete", 
+            "log": f"Found {num_rules} policy rules", 
+            "data": {"rules_count": num_rules, "category": policy_profile.get("category")}
+        }
+        
+        # =====================================================================
+        # SUBSTEP 4: Fetch Citations
+        # =====================================================================
+        num_citations = len(policy_profile.get("citations", []))
+        yield {"substep": "sources", "status": "active", "log": f"Fetching {num_citations} policy citations...", "data": None}
+        
+        print(f"   [SOURCE] Fetching {num_citations} citations...")
+        source_texts = get_source_text(policy_profile["citations"])
+        
+        yield {
+            "substep": "sources", 
+            "status": "complete", 
+            "log": f"Loaded {len(source_texts)} sources", 
+            "data": {"sources_count": len(source_texts)}
+        }
+        
+        # =====================================================================
+        # SUBSTEP 5: LLM Decision
+        # =====================================================================
+        yield {"substep": "decision", "status": "active", "log": "LLM analyzing policy rules...", "data": None}
+        
+        print("   [DECISION] Calling LLM for policy decision...")
+        decision_result = await self.make_llm_decision(policy_profile, source_texts, context)
+        decision = decision_result.get("decision", "UNKNOWN")
+        
+        print(f"   [DECISION] Result: {decision}")
+        
+        yield {
+            "substep": "decision", 
+            "status": "complete", 
+            "log": f"{decision}", 
+            "data": {"decision": decision, "reasoning": decision_result.get("reasoning", "")}
+        }
+        
+        # =====================================================================
+        # SUBSTEP 6: Generate Explanation
+        # =====================================================================
+        yield {"substep": "explain", "status": "active", "log": "Generating customer explanation...", "data": None}
+        
+        print("   [EXPLAIN] Generating customer explanation...")
+        explanation = await self.generate_explanation(decision_result)
+        
+        yield {
+            "substep": "explain", 
+            "status": "complete", 
+            "log": "Explanation ready", 
+            "data": None
+        }
+        
+        # =====================================================================
+        # BUILD FINAL OUTPUT
+        # =====================================================================
+        output = {
+            "order_id": context["order_id"],
+            "decision": decision_result["decision"],
+            "customer_explanation": explanation,
+            "details": {
+                "reasoning": decision_result.get("reasoning", ""),
+                "applicable_fees": decision_result.get("applicable_fees", []),
+                "policy_citations": decision_result.get("policy_citations", [])
+            },
+            "context_used": {
+                "days_since_delivery": context["days_since_delivery"],
+                "membership_tier": context["membership_tier"],
+                "item_condition": context["item_condition"],
+                "mapped_category": mapped_category,
+                "region": context["region"]
+            },
+            "policy_profile": policy_profile
+        }
+        
+        print("\n" + "="*60)
+        print(f"FINAL DECISION: {decision_result['decision']}")
+        print("="*60)
+        
+        # Final yield with complete result
+        yield {"substep": "FINAL", "status": "complete", "log": None, "data": output}
 
 
 

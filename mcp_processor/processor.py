@@ -439,6 +439,210 @@ Extract all order and customer details from the text above."""
         
         return None
 
+    async def verify_request_with_db_streaming(self, extracted_data):
+        """
+        Streaming version of verify_request_with_db that yields sub-step events.
+        Yields events for each MCP tool call in the agent loop.
+        
+        Yields dict events: {"substep": str, "status": str, "log": str, "data": dict}
+        Final event: {"substep": "FINAL", "status": "complete", "data": {...}}
+        """
+        db_session = self.sessions.get("db_verification")
+        if not db_session:
+            print("❌ Error: db_verification session not available.")
+            yield {"substep": "error", "status": "error", "log": "DB session not available", "data": None}
+            yield {"substep": "FINAL", "status": "complete", "data": None}
+            return
+
+        yield {"substep": "init", "status": "active", "log": "Initializing agent loop...", "data": None}
+        
+        print("\n" + "="*40)
+        print("DATABASE VERIFICATION (AGENT LOOP - STREAMING)")
+        print("="*40)
+
+        tools_response = await db_session.list_tools()
+        tools_map = {t.name: t for t in tools_response.tools}
+        tools_desc = []
+        for t in tools_response.tools:
+            tools_desc.append({
+                "name": t.name,
+                "description": t.description,
+                "parameters": t.inputSchema
+            })
+
+        yield {"substep": "init", "status": "complete", "log": f"Loaded {len(tools_desc)} MCP tools", "data": {"tools_count": len(tools_desc)}}
+
+        messages = [
+"""
+        You are an expert DB Verification Agent. Your goal is to verify a customer refund request.
+        
+        STRICT VERIFICATION PROCESS (Follow in order):
+        
+        STEP 1: IDENTITY CHECK
+        - Call 'verify_from_email_matches_customer' with the customer_email.
+        - IF 'matched' is False: Call llm_find_orders. Output "Request sent for Human Review" and terminate.
+        - IF 'matched' is True: Proceed to Step 2.
+        
+        STEP 2: FIND ORDER (Hierarchical Search)
+        - ATTEMPT 1: If 'order_invoice_id' exists in data, call 'find_order_by_order_invoice_id'.
+          - If found, you are DONE. Return the order details.
+        - ATTEMPT 2: If finding by ID failed or ID was missing, check if 'invoice_number' exists in data.
+          - If yes, call 'find_order_by_invoice_number'.
+          - If found, you are DONE.
+        - ATTEMPT 3: If specific searches fail, call 'get_customer_orders_with_items' to get a list of recent orders.
+          - Then immediately call 'select_order_id' passing that usage data to pick the best one.
+          - If a 'selected_order_id' is returned, specific logic to confirm it? No, just accept the selection.
+        - ATTEMPT 4: If all else fails, call 'llm_find_orders' to search via SQL.
+        
+        STEP 3: REPORT
+        - If an order is found in any step, output "Verification Successful" and ensure you copy the full order JSON into 'verified_data'.
+        - If completely stuck after all attempts, output "Sending for Human Review".
+        
+        INSTRUCTIONS:
+        - Decide the NEXT SINGLE Action.
+        - Output JSON ONLY: { "tool_name": "...", "arguments": { ... } }
+        - If you are done or need to stop, output JSON: { "action": "terminate", "reason": "...", "verified_data": object|null }
+          (If verification was successful, you MUST include the full retrieved order details in the 'verified_data' field).
+        """
+]
+        context_str = f"EXTRACTED DATA:\n{json.dumps(extracted_data, indent=2)}\n\nAVAILABLE TOOLS:\n{json.dumps(tools_desc)}"
+        messages.append(context_str)
+
+        max_turns = 8
+        fuzzy_tools_used = []
+        tool_call_count = 0
+        
+        for i in range(max_turns):
+            print(f"\n--- Turn {i+1} ---")
+            
+            # Rate limiting sleep
+            await asyncio.sleep(2)
+            
+            prompt_content = "\n".join(messages) + "\n\nWhat is the next step? Output valid JSON only."
+            
+            yield {"substep": "llm_think", "status": "active", "log": f"Agent thinking (turn {i+1})...", "data": None}
+            
+            try:
+                response = await self.generate_with_retry(
+                    model='gemini-2.5-flash', 
+                    contents=prompt_content,
+                    config={"response_mime_type": "application/json"}
+                )
+                
+                decision_text = response.text
+                
+                # Handle None or empty response from Gemini
+                if decision_text is None or decision_text.strip() == "":
+                    print(f"⚠️ Empty response from LLM on turn {i+1}. Retrying...")
+                    messages.append("System: Your previous response was empty. Please provide a valid JSON response.")
+                    continue
+                
+                print(f"🤖 Agent thought: {decision_text}")
+                
+                try:
+                    decision = json.loads(decision_text)
+                except json.JSONDecodeError as json_err:
+                    print(f"⚠️ Failed to parse JSON response: {json_err}")
+                    messages.append(f"System: Your response was not valid JSON. Error: {json_err}. Please output valid JSON only.")
+                    continue
+
+                if "action" in decision and decision["action"] == "terminate":
+                    reason = decision.get('reason', 'Complete')
+                    print(f"🏁 Agent Finished: {reason}")
+                    yield {"substep": "complete", "status": "complete", "log": reason, "data": None}
+                    yield {
+                        "substep": "FINAL", 
+                        "status": "complete", 
+                        "data": {
+                            "verified_data": decision.get("verified_data"),
+                            "fuzzy_tools_used": fuzzy_tools_used
+                        }
+                    }
+                    return
+                
+                tool_name = decision.get("tool_name")
+                args = decision.get("arguments", {})
+                
+                if not tool_name:
+                    print(f"⚠️ Invalid decision format. Stopping.")
+                    break
+
+                # Validations before calling
+                if tool_name not in tools_map:
+                    print(f"❌ Error: Tool {tool_name} not found.")
+                    messages.append(f"System: Tool {tool_name} does not exist. Choose from available tools.")
+                    continue
+
+                # Yield tool call event
+                tool_call_count += 1
+                friendly_name = tool_name.replace("_", " ").title()
+                yield {
+                    "substep": f"tool_{tool_call_count}", 
+                    "status": "active", 
+                    "log": f"Calling {friendly_name}...", 
+                    "data": {"tool": tool_name, "args": args}
+                }
+                
+                print(f"▶️ Executing: {tool_name}...")
+                
+                # Track fuzzy matching tools
+                if tool_name in ["llm_find_orders", "select_order_id"]:
+                    fuzzy_tools_used.append(tool_name)
+                
+                result = await db_session.call_tool(tool_name, arguments=args)
+                tool_output_str = result.content[0].text
+                
+                # Print snippet for user
+                display_output = tool_output_str[:500] + "..." if len(tool_output_str) > 500 else tool_output_str
+                print(f"📄 Output: {display_output}")
+                
+                # Determine success/result summary for UI
+                try:
+                    tool_result = json.loads(tool_output_str)
+                    if tool_name == "verify_from_email_matches_customer":
+                        if tool_result.get("matched"):
+                            result_summary = "Email verified ✓"
+                        else:
+                            result_summary = "Email not found"
+                    elif tool_name in ["find_order_by_order_invoice_id", "find_order_by_invoice_number"]:
+                        if tool_result.get("order_id") or tool_result.get("data"):
+                            result_summary = f"Order found ✓"
+                        else:
+                            result_summary = "Order not found"
+                    elif tool_name == "get_customer_orders_with_items":
+                        order_count = len(tool_result.get("orders", []))
+                        result_summary = f"Found {order_count} orders"
+                    elif tool_name == "select_order_id":
+                        if tool_result.get("selected_order_id"):
+                            result_summary = f"Selected order: {tool_result.get('selected_order_id')}"
+                        else:
+                            result_summary = "No match found"
+                    elif tool_name == "llm_find_orders":
+                        result_summary = "SQL query executed"
+                    else:
+                        result_summary = "Complete"
+                except:
+                    result_summary = "Complete"
+                
+                yield {
+                    "substep": f"tool_{tool_call_count}", 
+                    "status": "complete", 
+                    "log": result_summary, 
+                    "data": None
+                }
+                
+                # Feed result back to context
+                messages.append(f"Tool '{tool_name}' Result:\n{tool_output_str}")
+                
+            except Exception as e:
+                print(f"❌ Error in Agent Loop: {e}")
+                yield {"substep": "error", "status": "error", "log": f"Error: {str(e)}", "data": None}
+                break
+        
+        # If we exit the loop without terminating
+        yield {"substep": "complete", "status": "complete", "log": "Max turns reached", "data": None}
+        yield {"substep": "FINAL", "status": "complete", "data": None}
+
     async def process_single_email(self, bucket, blob_path):
         """Processes a single email from GCS."""
         print(f"Processing: gs://{bucket}/{blob_path}")
@@ -702,10 +906,25 @@ Extract all order and customer details from the text above."""
         yield {"step": "extraction", "status": "complete", "log": f"🧠 Extracted: Order #{extracted_data.get('order_invoice_id', 'N/A')}, Customer: {extracted_data.get('customer_email', 'N/A')}", "data": extracted_data}
 
         # ========== STEP 5: VERIFICATION ==========
-        # Same as process_single_email
+        # Use streaming version to yield sub-step events
         yield {"step": "verification", "status": "active", "log": "🔐 Starting database verification...", "data": None}
         
-        verification_result = await self.verify_request_with_db(extracted_data)
+        # Stream verification sub-steps
+        verification_result = None
+        async for event in self.verify_request_with_db_streaming(extracted_data):
+            if event["substep"] == "FINAL":
+                # Final event contains the complete result
+                verification_result = event["data"]
+            else:
+                # Yield sub-step events to UI
+                yield {
+                    "step": "verification",
+                    "status": "active",
+                    "substep": event["substep"],
+                    "substep_status": event["status"],
+                    "log": event["log"],
+                    "data": event.get("data")
+                }
         
         # Extract verified data and fuzzy tools info from result (same as process_single_email)
         verified_record = None
@@ -714,6 +933,7 @@ Extract all order and customer details from the text above."""
         if verification_result:
             verified_record = verification_result.get("verified_data")
             fuzzy_tools_used = verification_result.get("fuzzy_tools_used", [])
+
 
         # ========== STEP 6: ADJUDICATION ==========
         adjudication_result = None
@@ -742,22 +962,47 @@ Extract all order and customer details from the text above."""
                     "reasoning": f"Order was found using fuzzy matching: {fuzzy_tools_used}"
                 }}
                 
+                # Insert refund case with pending human review status (same as process_single_email)
+                self.insert_refund_case(
+                    email_data=email_data,
+                    extracted_data=extracted_data,
+                    verified_record=verified_record,
+                    adjudication_result=None  # No adjudication - needs human review
+                )
+                
                 print("Processing Complete.")
                 return
             
             # --- Adjudication (only if exact match was found) --- (same as process_single_email)
             try:
-                yield {"step": "adjudication", "status": "active", "log": "⚖️ Checking against return policy...", "data": None}
+                yield {"step": "adjudication", "status": "active", "log": "⚖️ Starting policy adjudication...", "data": None}
                 
                 print("\n" + "="*50)
-                print("RUNNING ADJUDICATOR AGENT")
+                print("RUNNING ADJUDICATOR AGENT (STREAMING)")
                 print("="*50)
                 
                 adjudicator = Adjudicator()
-                adjudication_result = await adjudicator.adjudicate(verified_record)
+                adjudication_result = None
                 
-                decision = adjudication_result.get("decision", "UNKNOWN")
-                reasoning = adjudication_result.get("details", {}).get("reasoning", "N/A")
+                # Use streaming adjudicator to yield sub-step events
+                async for event in adjudicator.adjudicate_streaming(verified_record):
+                    if event["substep"] == "FINAL":
+                        # Final event contains the complete result
+                        adjudication_result = event["data"]
+                    else:
+                        # Yield sub-step events to UI
+                        yield {
+                            "step": "adjudication",
+                            "status": "active",
+                            "substep": event["substep"],
+                            "substep_status": event["status"],
+                            "log": event["log"],
+                            "data": event.get("data")
+                        }
+                
+                # Mark adjudication complete
+                decision = adjudication_result.get("decision", "UNKNOWN") if adjudication_result else "UNKNOWN"
+                reasoning = adjudication_result.get("details", {}).get("reasoning", "N/A") if adjudication_result else "N/A"
                 
                 print(f"\nDECISION: {decision}")
                 print(f"REASON: {reasoning}")
@@ -772,7 +1017,14 @@ Extract all order and customer details from the text above."""
                     "verified_record": verified_record,
                     "adjudication": adjudication_result
                 }}
-                
+
+                # Insert to DB (same as process_single_email)
+                self.insert_refund_case(
+                    email_data=email_data,
+                    extracted_data=extracted_data,
+                    verified_record=verified_record,
+                    adjudication_result=adjudication_result
+                )
             except Exception as e:
                 print(f"⚠️ Adjudication failed: {e}")
                 import traceback
@@ -791,6 +1043,14 @@ Extract all order and customer details from the text above."""
                 "decision": "PENDING_REVIEW",
                 "reasoning": "Order not found in database"
             }}
+            
+            # Insert to DB with no verified record (same as process_single_email)
+            self.insert_refund_case(
+                email_data=email_data,
+                extracted_data=extracted_data,
+                verified_record=None,
+                adjudication_result=None
+            )
         
         print("Processing Complete.")
 

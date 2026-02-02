@@ -390,6 +390,16 @@ async function runPipeline() {
                                         statusEl.textContent = 'Processing...';
                                         statusEl.className = 'step-status processing';
                                     }
+                                    // Show step result for adjudication to reveal substeps
+                                    if (event.step === 'adjudication') {
+                                        const resultEl = stepElement.querySelector('.step-result');
+                                        if (resultEl) resultEl.classList.remove('hidden');
+                                    }
+                                    // Show step result for verification to reveal dynamic substeps
+                                    if (event.step === 'verification') {
+                                        const resultEl = stepElement.querySelector('.step-result');
+                                        if (resultEl) resultEl.classList.remove('hidden');
+                                    }
                                 } else if (event.status === 'complete') {
                                     stepElement.classList.remove('active');
                                     stepElement.classList.add('completed');
@@ -400,6 +410,11 @@ async function runPipeline() {
                                     // Show step result if available
                                     const resultEl = stepElement.querySelector('.step-result');
                                     if (resultEl) resultEl.classList.remove('hidden');
+                                    // Show verification result card when complete
+                                    if (event.step === 'verification') {
+                                        const verificationResult = document.getElementById('verificationResult');
+                                        if (verificationResult) verificationResult.style.display = 'flex';
+                                    }
                                 } else if (event.status === 'error') {
                                     stepElement.classList.remove('active');
                                     stepElement.classList.add('error');
@@ -409,6 +424,17 @@ async function runPipeline() {
                                     }
                                 }
                             }
+
+                            // Handle substep updates for adjudication
+                            if (event.step === 'adjudication' && event.substep && event.substep_status) {
+                                updateSubstep(event.substep, event.substep_status, event.log);
+                            }
+
+                            // Handle substep updates for verification (dynamic)
+                            if (event.step === 'verification' && event.substep && event.substep_status) {
+                                updateVerificationSubstep(event.substep, event.substep_status, event.log, event.data);
+                            }
+
 
                             // Add log
                             if (event.log) {
@@ -525,6 +551,162 @@ function updateStepData(step, data) {
                 }
             }
             break;
+    }
+}
+
+// Helper function to update adjudication sub-steps in real-time
+function updateSubstep(substepId, status, log) {
+    const substep = document.querySelector(`[data-substep="${substepId}"]`);
+    if (!substep) return;
+
+    const indicator = substep.querySelector('.substep-indicator');
+    const statusEl = substep.querySelector('.substep-status');
+
+    // Remove all state classes
+    substep.classList.remove('active', 'complete', 'pending');
+    if (indicator) {
+        indicator.classList.remove('active', 'complete', 'pending');
+    }
+
+    if (status === 'active') {
+        substep.classList.add('active');
+        if (indicator) {
+            indicator.classList.add('active');
+            indicator.textContent = '●';
+        }
+        if (statusEl) {
+            statusEl.textContent = 'Running...';
+        }
+    } else if (status === 'complete') {
+        substep.classList.add('complete');
+        if (indicator) {
+            indicator.classList.add('complete');
+            indicator.textContent = '✓';
+        }
+        if (statusEl) {
+            // Show the log message as the status (e.g., category name, decision)
+            statusEl.textContent = log || 'Done';
+        }
+    }
+}
+
+// Helper function to reset all adjudication sub-steps
+function resetSubsteps() {
+    const substeps = document.querySelectorAll('.substep');
+    substeps.forEach(substep => {
+        substep.classList.remove('active', 'complete');
+        const indicator = substep.querySelector('.substep-indicator');
+        const statusEl = substep.querySelector('.substep-status');
+        if (indicator) {
+            indicator.classList.remove('active', 'complete');
+            indicator.classList.add('pending');
+            indicator.textContent = '○';
+        }
+        if (statusEl) {
+            statusEl.textContent = 'Pending';
+        }
+    });
+}
+
+// ============================================
+// Verification Sub-Steps (Dynamic)
+// ============================================
+
+// Track verification sub-steps state
+const verificationSubsteps = {};
+
+// Add or update a verification sub-step dynamically
+function updateVerificationSubstep(substepId, status, log, data) {
+    const container = document.getElementById('verificationSubsteps');
+    if (!container) return;
+
+    // Get or create the sub-step element
+    let substepEl = document.getElementById(`verification-substep-${substepId}`);
+
+    if (!substepEl) {
+        // Create new sub-step element
+        substepEl = document.createElement('div');
+        substepEl.className = 'substep';
+        substepEl.id = `verification-substep-${substepId}`;
+
+        // Determine icon based on substep type
+        let icon = '🔧';
+        if (substepId === 'init') icon = '⚙️';
+        else if (substepId === 'llm_think') icon = '🧠';
+        else if (substepId === 'complete') icon = '✅';
+        else if (substepId === 'error') icon = '❌';
+        else if (substepId.startsWith('tool_')) icon = '🔧';
+
+        substepEl.innerHTML = `
+            <span class="substep-indicator pending">○</span>
+            <span class="substep-icon">${icon}</span>
+            <span class="substep-label">${log || substepId}</span>
+            <span class="substep-status">Pending</span>
+        `;
+
+        container.appendChild(substepEl);
+        verificationSubsteps[substepId] = substepEl;
+    }
+
+    const indicator = substepEl.querySelector('.substep-indicator');
+    const label = substepEl.querySelector('.substep-label');
+    const statusEl = substepEl.querySelector('.substep-status');
+
+    // Update label if log changed
+    if (log && label) {
+        label.textContent = log;
+    }
+
+    // Update status
+    if (status === 'active') {
+        substepEl.classList.remove('complete');
+        substepEl.classList.add('active');
+        if (indicator) {
+            indicator.classList.remove('pending', 'complete');
+            indicator.classList.add('active');
+            indicator.textContent = '●';
+        }
+        if (statusEl) {
+            statusEl.textContent = 'In Progress';
+        }
+    } else if (status === 'complete') {
+        substepEl.classList.remove('active');
+        substepEl.classList.add('complete');
+        if (indicator) {
+            indicator.classList.remove('pending', 'active');
+            indicator.classList.add('complete');
+            indicator.textContent = '✓';
+        }
+        if (statusEl) {
+            statusEl.textContent = log || 'Done';
+        }
+    } else if (status === 'error') {
+        substepEl.classList.remove('active');
+        substepEl.classList.add('error');
+        if (indicator) {
+            indicator.classList.remove('pending', 'active', 'complete');
+            indicator.classList.add('error');
+            indicator.textContent = '✗';
+        }
+        if (statusEl) {
+            statusEl.textContent = log || 'Error';
+        }
+    }
+}
+
+// Reset verification sub-steps container
+function resetVerificationSubsteps() {
+    const container = document.getElementById('verificationSubsteps');
+    if (container) {
+        container.innerHTML = '';
+    }
+    // Clear tracking
+    Object.keys(verificationSubsteps).forEach(key => delete verificationSubsteps[key]);
+
+    // Hide the verification result
+    const resultEl = document.getElementById('verificationResult');
+    if (resultEl) {
+        resultEl.style.display = 'none';
     }
 }
 
@@ -657,6 +839,12 @@ function resetPipeline() {
 
     elements.pipelineTimer.classList.add('hidden');
     elements.timerValue.textContent = '00:00';
+
+    // Reset adjudication sub-steps
+    resetSubsteps();
+
+    // Reset verification sub-steps (dynamic)
+    resetVerificationSubsteps();
 }
 
 // ============================================

@@ -325,7 +325,11 @@
                         </div>
                         <p class="step-description">Verify order details against orders database</p>
                         <div class="step-result hidden">
-                            <div class="verification-result">
+                            <!-- Dynamic sub-steps container for MCP agent tool calls -->
+                            <div class="substeps-container dynamic-substeps" id="verificationSubsteps">
+                                <!-- Sub-steps will be dynamically added as MCP tools are called -->
+                            </div>
+                            <div class="verification-result" id="verificationResult" style="display: none;">
                                 <div class="verification-icon success">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                         <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
@@ -346,6 +350,7 @@
                                 View Verified Order
                             </button>
                         </div>
+
                     </div>
                 </div>
 
@@ -366,30 +371,46 @@
                         </div>
                         <p class="step-description">Evaluate request against company return policy</p>
                         <div class="step-result hidden">
-                            <div class="policy-checks" id="policyChecks">
-                                <div class="policy-check passed">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                                        width="14" height="14">
-                                        <polyline points="20 6 9 17 4 12" />
-                                    </svg>
-                                    Within 30-day return window
+                            <div class="substeps-container" id="adjudicationSubsteps">
+                                <div class="substep" data-substep="context">
+                                    <span class="substep-indicator pending">○</span>
+                                    <span class="substep-name">Build Context</span>
+                                    <span class="substep-status">Pending</span>
+                                    <div class="substep-detail"></div>
                                 </div>
-                                <div class="policy-check passed">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                                        width="14" height="14">
-                                        <polyline points="20 6 9 17 4 12" />
-                                    </svg>
-                                    Valid invoice documentation
+                                <div class="substep" data-substep="classify">
+                                    <span class="substep-indicator pending">○</span>
+                                    <span class="substep-name">Classify Category</span>
+                                    <span class="substep-status">Pending</span>
+                                    <div class="substep-detail"></div>
                                 </div>
-                                <div class="policy-check passed">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                                        width="14" height="14">
-                                        <polyline points="20 6 9 17 4 12" />
-                                    </svg>
-                                    Product eligible for return
+                                <div class="substep" data-substep="graph">
+                                    <span class="substep-indicator pending">○</span>
+                                    <span class="substep-name">Graph Traversal</span>
+                                    <span class="substep-status">Pending</span>
+                                    <div class="substep-detail"></div>
+                                </div>
+                                <div class="substep" data-substep="sources">
+                                    <span class="substep-indicator pending">○</span>
+                                    <span class="substep-name">Fetch Citations</span>
+                                    <span class="substep-status">Pending</span>
+                                    <div class="substep-detail"></div>
+                                </div>
+                                <div class="substep" data-substep="decision">
+                                    <span class="substep-indicator pending">○</span>
+                                    <span class="substep-name">LLM Decision</span>
+                                    <span class="substep-status">Pending</span>
+                                    <div class="substep-detail"></div>
+                                </div>
+                                <div class="substep" data-substep="explain">
+                                    <span class="substep-indicator pending">○</span>
+                                    <span class="substep-name">Generate Explanation</span>
+                                    <span class="substep-status">Pending</span>
+                                    <div class="substep-detail"></div>
                                 </div>
                             </div>
                         </div>
+
                     </div>
                 </div>
 
