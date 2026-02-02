@@ -29,14 +29,17 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-# CORS - Allow requests from any origin (for demo UI)
+# CORS - Allow requests from GCS-hosted frontend and localhost for dev
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://storage.googleapis.com"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 @app.post("/process")
 async def process_task(request: Request):

@@ -322,7 +322,7 @@ async function runPipeline() {
     const scenario = state.selectedScenario; // Already the scenario object
 
     // API endpoint - Cloud Run backend
-    const API_URL = 'https://mcp-processor-171083103370.northamerica-northeast1.run.app/process-demo';
+    const API_URL = 'https://mcp-processor-bq657sjnfq-nn.a.run.app/process-demo';
 
     // Reset all steps to pending
     document.querySelectorAll('.pipeline-step').forEach(step => {
