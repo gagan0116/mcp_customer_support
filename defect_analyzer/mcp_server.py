@@ -117,7 +117,7 @@ async def analyze_defect_image(
             status = "error"
         else:
             status = "success"
-        
+        print(f"Defect analysis result: {description}, status: {status}")
         return json.dumps({
             "description": description,
             "status": status
