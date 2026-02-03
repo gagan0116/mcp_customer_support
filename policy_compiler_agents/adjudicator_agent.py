@@ -714,13 +714,17 @@ class AdjudicatorV2:
         traversal_result = await traverse_from_category(mapped_category)
         policy_profile = build_policy_profile(traversal_result)
         
+        # Count hops for detailed display
+        hop1_count = len(traversal_result.get("hop1_nodes", []))
+        hop2_count = len(traversal_result.get("hop2_nodes", []))
+        hop3_count = len(traversal_result.get("hop3_nodes", []))
         num_rules = len(policy_profile.get("windows", [])) + len(policy_profile.get("fees", [])) + len(policy_profile.get("restrictions", []))
         
         yield {
             "substep": "graph", 
             "status": "complete", 
-            "log": f"Found {num_rules} policy rules", 
-            "data": {"rules_count": num_rules, "category": policy_profile.get("category")}
+            "log": f"Found {hop1_count} hop1, {hop2_count} hop2, {hop3_count} hop3 nodes", 
+            "data": {"rules_count": num_rules, "hop1": hop1_count, "hop2": hop2_count, "hop3": hop3_count, "category": policy_profile.get("category")}
         }
         
         # =====================================================================
@@ -732,11 +736,17 @@ class AdjudicatorV2:
         print(f"   [SOURCE] Fetching {num_citations} citations...")
         source_texts = get_source_text(policy_profile["citations"])
         
+        # Build citation details for log display
+        citation_details = list(source_texts.keys()) if source_texts else []
+        citation_log = f"Loaded {len(source_texts)} sources"
+        if citation_details:
+            citation_log += ": " + ", ".join(citation_details)
+        
         yield {
             "substep": "sources", 
             "status": "complete", 
-            "log": f"Loaded {len(source_texts)} sources", 
-            "data": {"sources_count": len(source_texts)}
+            "log": citation_log, 
+            "data": {"sources_count": len(source_texts), "citations": citation_details}
         }
         
         # =====================================================================
@@ -769,7 +779,7 @@ class AdjudicatorV2:
             "substep": "explain", 
             "status": "complete", 
             "log": "Explanation ready", 
-            "data": None
+            "data": {"explanation": explanation}
         }
         
         # =====================================================================
