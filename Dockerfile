@@ -26,4 +26,4 @@ EXPOSE 8080
 
 # Command to run the application using uvicorn
 # --timeout-keep-alive: Keep connections alive for long-running compilation jobs
-CMD ["uvicorn", "mcp_server.main:app", "--host", "0.0.0.0", "--port", "8080", "--timeout-keep-alive", "300"]
+CMD ["uvicorn", "knowledge_base_server.main:app", "--host", "0.0.0.0", "--port", "8080", "--timeout-keep-alive", "300"]
