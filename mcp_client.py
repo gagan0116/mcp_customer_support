@@ -18,7 +18,7 @@ from google.genai import types
 load_dotenv()
 
 # Add parent directory to path to find servers and utility scripts
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(PROJECT_ROOT)
 
 # Import the GCS download function
