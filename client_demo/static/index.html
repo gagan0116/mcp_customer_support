@@ -4,13 +4,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Customer Support AI Demo | Refund Pipeline</title>
+    <title>VARA.ai</title>
     <meta name="description"
         content="AI-powered customer support automation demo - simulate email processing, verification, and policy adjudication">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
         rel="stylesheet">
+    <link rel="icon" type="image/png" href="favicon.png">
     <link rel="stylesheet" href="styles.css">
 </head>
 
@@ -28,14 +29,12 @@
     <header class="header">
         <div class="header-content">
             <div class="logo">
-                <div class="logo-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-                    </svg>
+                <div class="logo-icon" style="overflow: hidden;">
+                    <img src="favicon.png" alt="Logo" style="width: 100%; height: 100%; object-fit: contain;">
                 </div>
                 <div class="logo-text">
-                    <span class="logo-title">Customer Support AI</span>
-                    <span class="logo-subtitle">Demonstration Mode</span>
+                    <span class="logo-title">VARA.ai</span>
+                    <span class="logo-subtitle">AI based Customer Support</span>
                 </div>
             </div>
             <div class="header-status">
@@ -93,24 +92,12 @@
                             <span class="meta-label">To:</span>
                             <span class="meta-value support-email">vara.assist@gmail.com</span>
                         </div>
-                        <div class="email-meta-item category-badge-wrapper">
-                            <span id="categoryBadge" class="category-badge return">RETURN</span>
-                        </div>
                     </div>
 
                     <div class="email-meta-row">
                         <div class="email-meta-item">
                             <span class="meta-label">Received:</span>
                             <span class="meta-value" id="receivedAt"></span>
-                        </div>
-                        <div class="email-meta-item confidence-wrapper">
-                            <span class="meta-label">Confidence:</span>
-                            <div class="confidence-indicator">
-                                <div class="confidence-bar-mini">
-                                    <div class="confidence-fill-mini" id="confidenceFill" style="width: 0%"></div>
-                                </div>
-                                <span class="confidence-value-mini" id="confidenceValue"></span>
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -430,19 +417,24 @@
                         <p class="step-description">Generate automated response and action</p>
                         <div class="step-result hidden">
                             <div class="final-decision approved" id="finalDecision">
-                                <div class="decision-badge">
+                                <div class="decision-badge" id="decisionBadge">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                         <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
                                         <polyline points="22 4 12 14.01 9 11.01" />
                                     </svg>
-                                    APPROVED
+                                    <span id="decisionText">APPROVED</span>
                                 </div>
-                                <p class="decision-reason">Return request approved based on valid documentation and
-                                    policy compliance.</p>
-                                <div class="decision-actions">
-                                    <span class="action-item">✓ Return label generated</span>
-                                    <span class="action-item">✓ Customer notified via email</span>
-                                    <span class="action-item">✓ Case logged in system</span>
+                                <div class="decision-details">
+                                    <div class="reasoning-section">
+                                        <h5>🧠 Reasoning</h5>
+                                        <p class="decision-reasoning" id="decisionReasoning">Analyzing policy rules...
+                                        </p>
+                                    </div>
+                                    <div class="explanation-section">
+                                        <h5>💬 Customer Explanation</h5>
+                                        <p class="customer-explanation" id="customerExplanation">Generating
+                                            explanation...</p>
+                                    </div>
                                 </div>
                             </div>
                         </div>

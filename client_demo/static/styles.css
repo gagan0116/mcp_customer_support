@@ -215,12 +215,16 @@ body {
 .logo-icon {
     width: 44px;
     height: 44px;
-    background: var(--accent-gradient);
-    border-radius: var(--radius-md);
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+.logo-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    border-radius: var(--radius-md);
 }
 
 .logo-icon svg {
@@ -1662,4 +1666,55 @@ body {
 
 .substep.complete .substep-detail:not(:empty) {
     display: block;
+}
+
+/* Decision Details - Reasoning and Explanation */
+.decision-details {
+    margin-top: var(--spacing-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+}
+
+.reasoning-section,
+.explanation-section {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md);
+}
+
+.reasoning-section h5,
+.explanation-section h5 {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: var(--spacing-sm);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+}
+
+.decision-reasoning,
+.customer-explanation {
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin: 0;
+}
+
+.final-decision.denied .reasoning-section {
+    border-left: 3px solid var(--error);
+}
+
+.final-decision.approved .reasoning-section {
+    border-left: 3px solid var(--success);
+}
+
+.final-decision.denied .explanation-section {
+    border-left: 3px solid var(--warning);
+}
+
+.final-decision.approved .explanation-section {
+    border-left: 3px solid var(--info);
 }

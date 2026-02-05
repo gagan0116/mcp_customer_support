@@ -70,7 +70,9 @@ const state = {
     isProcessing: false,
     pipelineStep: 0,
     startTime: null,
-    timerInterval: null
+    timerInterval: null,
+    extractedData: null,   // Stores LLM extraction result from SSE
+    verifiedData: null     // Stores DB verification result from SSE
 };
 
 // ============================================
@@ -83,10 +85,7 @@ const elements = {
     // Email Preview
     emailPreview: document.getElementById('emailPreview'),
     emptyState: document.getElementById('emptyState'),
-    categoryBadge: document.getElementById('categoryBadge'),
     receivedAt: document.getElementById('receivedAt'),
-    confidenceFill: document.getElementById('confidenceFill'),
-    confidenceValue: document.getElementById('confidenceValue'),
     emailBody: document.getElementById('emailBody'),
     attachmentsList: document.getElementById('attachmentsList'),
 
@@ -189,9 +188,9 @@ function populateEmailPreview(scenario) {
     elements.emptyState.classList.add('hidden');
     elements.submitBtn.disabled = false;
 
-    // Category badge
-    elements.categoryBadge.textContent = scenario.category;
-    elements.categoryBadge.className = `category-badge ${scenario.category.toLowerCase()}`;
+    // Category badge (Removed)
+    // elements.categoryBadge.textContent = scenario.category;
+    // elements.categoryBadge.className = `category-badge ${scenario.category.toLowerCase()}`;
 
     // Received timestamp
     const receivedDate = new Date(scenario.received_at);
@@ -204,10 +203,10 @@ function populateEmailPreview(scenario) {
         hour12: true
     });
 
-    // Confidence
-    const confidencePercent = Math.round(scenario.confidence * 100);
-    elements.confidenceFill.style.width = `${confidencePercent}%`;
-    elements.confidenceValue.textContent = `${confidencePercent}%`;
+    // Confidence (Removed)
+    // const confidencePercent = Math.round(scenario.confidence * 100);
+    // elements.confidenceFill.style.width = `${confidencePercent}%`;
+    // elements.confidenceValue.textContent = `${confidencePercent}%`;
 
     // Email body - clean up the duplicated text if present
     let emailText = scenario.email_body || '';
@@ -427,7 +426,7 @@ async function runPipeline() {
 
                             // Handle substep updates for adjudication
                             if (event.step === 'adjudication' && event.substep && event.substep_status) {
-                                updateSubstep(event.substep, event.substep_status, event.log);
+                                updateSubstep(event.substep, event.substep_status, event.log, event.data);
                             }
 
                             // Handle substep updates for verification (dynamic)
@@ -446,6 +445,16 @@ async function runPipeline() {
                             // Update UI with real data
                             if (event.data) {
                                 updateStepData(event.step, event.data);
+
+                                // Capture extraction result for modal display
+                                if (event.step === 'extraction' && event.status === 'complete') {
+                                    state.extractedData = event.data;
+                                }
+
+                                // Capture verification result for modal display
+                                if (event.step === 'verification' && event.status === 'complete') {
+                                    state.verifiedData = event.data;
+                                }
 
                                 // Capture decision for final message
                                 if (event.step === 'decision' && event.data.decision) {
@@ -543,11 +552,25 @@ function updateStepData(step, data) {
 
         case 'decision':
             if (data.decision) {
-                // Update final decision display
-                const decisionDisplay = document.getElementById('finalDecision');
-                if (decisionDisplay) {
-                    decisionDisplay.textContent = data.decision;
-                    decisionDisplay.className = `decision-value decision-${data.decision.toLowerCase()}`;
+                // Update the decision text (don't overwrite the whole container!)
+                const decisionTextEl = document.getElementById('decisionText');
+                const decisionContainer = document.getElementById('finalDecision');
+                const reasoningEl = document.getElementById('decisionReasoning');
+                const explanationEl = document.getElementById('customerExplanation');
+
+                if (decisionTextEl) {
+                    decisionTextEl.textContent = data.decision;
+                }
+                if (decisionContainer) {
+                    decisionContainer.classList.remove('approved', 'denied', 'review');
+                    decisionContainer.classList.add(data.decision.toLowerCase());
+                }
+                if (reasoningEl && data.reasoning) {
+                    reasoningEl.textContent = data.reasoning;
+                }
+                // Check for customer explanation in nested adjudication data
+                if (explanationEl && data.adjudication && data.adjudication.customer_explanation) {
+                    explanationEl.textContent = data.adjudication.customer_explanation;
                 }
             }
             break;
@@ -555,7 +578,7 @@ function updateStepData(step, data) {
 }
 
 // Helper function to update adjudication sub-steps in real-time
-function updateSubstep(substepId, status, log) {
+function updateSubstep(substepId, status, log, data) {
     const substep = document.querySelector(`[data-substep="${substepId}"]`);
     if (!substep) return;
 
@@ -586,6 +609,33 @@ function updateSubstep(substepId, status, log) {
         if (statusEl) {
             // Show the log message as the status (e.g., category name, decision)
             statusEl.textContent = log || 'Done';
+        }
+
+        // Handle decision substep - populate reasoning
+        if (substepId === 'decision' && data) {
+            const reasoningEl = document.getElementById('decisionReasoning');
+            const decisionTextEl = document.getElementById('decisionText');
+            const decisionContainer = document.getElementById('finalDecision');
+
+            if (reasoningEl && data.reasoning) {
+                reasoningEl.textContent = data.reasoning;
+            }
+            if (decisionTextEl && data.decision) {
+                decisionTextEl.textContent = data.decision;
+                // Update styling based on decision
+                if (decisionContainer) {
+                    decisionContainer.classList.remove('approved', 'denied', 'review');
+                    decisionContainer.classList.add(data.decision.toLowerCase());
+                }
+            }
+        }
+
+        // Handle explain substep - populate customer explanation
+        if (substepId === 'explain' && data) {
+            const explanationEl = document.getElementById('customerExplanation');
+            if (explanationEl && data.explanation) {
+                explanationEl.textContent = data.explanation;
+            }
         }
     }
 }
@@ -764,37 +814,36 @@ function addLog(type, message) {
 // Modal Functions
 // ============================================
 function handleViewJson(type) {
-    if (!state.selectedScenario) return;
-
-    // For scenarios loaded from JSON, show the raw scenario data
     let data;
     let title;
 
     if (type === 'extracted') {
-        // Show the email classification/extraction data
-        data = {
-            category: state.selectedScenario.category,
-            confidence: state.selectedScenario.confidence,
-            user_id: state.selectedScenario.user_id,
-            received_at: state.selectedScenario.received_at,
-            email_body: state.selectedScenario.email_body,
-            attachments: state.selectedScenario.attachments ?
-                state.selectedScenario.attachments.map(a => ({
-                    filename: a.filename,
-                    mimeType: a.mimeType
-                })) : []
-        };
-        title = 'Extracted Email Data';
+        // Show the actual extraction result from LLM (captured from SSE events)
+        if (state.extractedData) {
+            data = state.extractedData;
+            title = 'Extracted Order Data (from LLM)';
+        } else {
+            // Fallback to scenario metadata if extraction hasn't run yet
+            data = {
+                note: 'Run the pipeline to see extraction results',
+                category: state.selectedScenario?.category,
+                user_id: state.selectedScenario?.user_id
+            };
+            title = 'Extracted Email Data (pending)';
+        }
     } else {
-        // Show verification status (mock for demo)
-        data = {
-            status: 'verified',
-            category: state.selectedScenario.category,
-            confidence: state.selectedScenario.confidence,
-            user_id: state.selectedScenario.user_id,
-            received_at: state.selectedScenario.received_at
-        };
-        title = 'Verified Order Data';
+        // Show the actual verified record from database (captured from SSE events)
+        if (state.verifiedData) {
+            data = state.verifiedData;
+            title = 'Verified Order Data (from Database)';
+        } else {
+            // Fallback if verification hasn't run yet
+            data = {
+                note: 'Run the pipeline to see verification results',
+                status: 'pending'
+            };
+            title = 'Verified Order Data (pending)';
+        }
     }
 
     elements.modalTitle.textContent = title;
@@ -845,6 +894,10 @@ function resetPipeline() {
 
     // Reset verification sub-steps (dynamic)
     resetVerificationSubsteps();
+
+    // Reset captured SSE data for modals
+    state.extractedData = null;
+    state.verifiedData = null;
 }
 
 // ============================================
