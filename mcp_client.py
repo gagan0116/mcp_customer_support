@@ -22,7 +22,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(PROJECT_ROOT)
 
 # Import the GCS download function
-from extract_json_gcs import download_blob
+from scripts.extract_json_gcs import download_blob
 
 # Import the Adjudicator Agent
 from policy_compiler_agents.adjudicator_agent import Adjudicator
