@@ -4,138 +4,348 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Policy Knowledge Base Compiler</title>
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Vis.js -->
+    <title>VARA.ai - Policy Compiler</title>
+    <meta name="description" content="Turn PDF Policies into queryable Knowledge Graphs using AI">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <!-- Vis.js for Graph Visualization -->
     <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
-    <style>
-        #mynetwork {
-            width: 100%;
-            height: 600px;
-            border: 1px solid #e5e7eb;
-            background-color: #f9fafb;
-        }
-
-        .step-active {
-            border-left: 4px solid #3b82f6;
-            background-color: #eff6ff;
-        }
-
-        .step-completed {
-            border-left: 4px solid #10b981;
-            opacity: 0.7;
-        }
-
-        .step-pending {
-            border-left: 4px solid #e5e7eb;
-            opacity: 0.5;
-        }
-    </style>
 </head>
 
-<body class="bg-gray-50 text-gray-800 font-sans">
+<body>
+    <!-- Background Effects -->
+    <div class="bg-gradient"></div>
+    <div class="bg-grid"></div>
+    <div class="floating-orbs">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+        <div class="orb orb-3"></div>
+    </div>
 
-    <div class="container mx-auto px-4 py-8 max-w-6xl">
-        <header class="mb-8 text-center">
-            <h1 class="text-4xl font-bold text-gray-900 mb-2">Policy Compiler Agent</h1>
-            <p class="text-lg text-gray-600">Turn PDF Policies into queryable Knowledge Graphs</p>
-        </header>
-
-        <!-- Main Grid -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-
-            <!-- Left Panel: Controls & Status -->
-            <div class="lg:col-span-1 space-y-6">
-
-                <!-- Upload Card -->
-                <div class="bg-white p-6 rounded-lg shadow-md">
-                    <h2 class="text-xl font-semibold mb-4">1. Upload Policy</h2>
-                    <div class="space-y-4">
-                        <div class="border-2 border-dashed border-gray-300 rounded-md p-6 text-center hover:bg-gray-50 transition"
-                            id="drop-zone">
-                            <input type="file" id="file-input" multiple accept=".pdf" class="hidden">
-                            <label for="file-input" class="cursor-pointer">
-                                <span class="text-blue-600 font-medium">Click to upload</span> or drag and drop
-                                <div class="text-xs text-gray-400 mt-1">PDF files only</div>
-                            </label>
-                            <div id="file-list" class="mt-2 text-sm text-gray-600 text-left"></div>
-                        </div>
-                        <button id="compile-btn"
-                            class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition disabled:opacity-50 disabled:cursor-not-allowed">
-                            Start Compilation
-                        </button>
-                    </div>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">
+                <div class="logo-icon" style="overflow: hidden;">
+                    <img src="favicon.png" alt="Logo" style="width: 100%; height: 100%; object-fit: contain;">
                 </div>
-
-                <!-- Status Card -->
-                <div class="bg-white p-6 rounded-lg shadow-md hidden" id="status-card">
-                    <h2 class="text-xl font-semibold mb-4">2. Progress</h2>
-                    <div class="mb-2 flex justify-between text-sm font-medium text-gray-700">
-                        <span id="status-text">Initializing...</span>
-                        <span id="progress-percent">0%</span>
-                    </div>
-                    <div class="w-full bg-gray-200 rounded-full h-2.5 mb-6">
-                        <div class="bg-blue-600 h-2.5 rounded-full transition-all duration-500" style="width: 0%"
-                            id="progress-bar"></div>
-                    </div>
-
-                    <div class="space-y-2 max-h-64 overflow-y-auto font-mono text-xs bg-gray-900 text-green-400 p-3 rounded"
-                        id="logs">
-                        <!-- Logs go here -->
-                    </div>
-                </div>
-
-                <!-- Visualize Existing Button -->
-                <div class="bg-white p-6 rounded-lg shadow-md" id="viz-existing-card">
-                    <h2 class="text-xl font-semibold mb-4">Explore</h2>
-                    <p class="text-sm text-gray-600 mb-4">View the current Knowledge Graph without recompiling.</p>
-                    <button id="viz-btn"
-                        class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded transition">
-                        Visualize Graph
-                    </button>
+                <div class="logo-text">
+                    <span class="logo-title">VARA.ai</span>
+                    <span class="logo-subtitle">Policy Compiler Agent</span>
                 </div>
             </div>
-
-            <!-- Right Panel: Visualization -->
-            <div class="lg:col-span-2">
-                <div class="bg-white p-6 rounded-lg shadow-md h-full">
-                    <div class="flex justify-between items-center mb-4">
-                        <h2 class="text-xl font-semibold">Knowledge Graph</h2>
-                        <div class="text-sm text-gray-500" id="graph-stats">Nodes: 0 | Edges: 0</div>
-                    </div>
-                    <div id="mynetwork"></div>
-                    <div class="mt-4 text-xs text-gray-400 text-center">
-                        Scroll to zoom • Drag to pan • Click nodes for details
-                    </div>
+            <nav class="header-nav">
+                <a href="https://storage.googleapis.com/mcp_frontend/index.html" class="nav-link">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+                    </svg>
+                    <span>Email Pipeline</span>
+                </a>
+                <a href="#" class="nav-link active">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="18" cy="5" r="3" />
+                        <circle cx="6" cy="12" r="3" />
+                        <circle cx="18" cy="19" r="3" />
+                        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+                        <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+                    </svg>
+                    <span>Policy Knowledge Base</span>
+                </a>
+            </nav>
+            <div class="header-status">
+                <div class="status-indicator">
+                    <span class="status-dot"></span>
+                    <span class="status-text">System Ready</span>
                 </div>
             </div>
         </div>
-    </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="main-container">
+        <!-- Left Panel: Controls -->
+        <section class="panel">
+            <!-- Visualize Knowledge Base Section -->
+            <div class="panel-header">
+                <div class="panel-icon" style="background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="18" cy="5" r="3" />
+                        <circle cx="6" cy="12" r="3" />
+                        <circle cx="18" cy="19" r="3" />
+                        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+                        <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+                    </svg>
+                </div>
+                <h2 class="panel-title">Visualize Knowledge Base</h2>
+            </div>
+
+            <!-- Visualize Card -->
+            <div class="card">
+                <p class="card-description">View the current Knowledge Graph without recompiling</p>
+                <button id="viz-btn" class="btn btn-success">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10" />
+                        <polygon points="10 8 16 12 10 16 10 8" />
+                    </svg>
+                    Visualize Graph
+                </button>
+            </div>
+
+            <!-- Policy Upload Section -->
+            <div class="panel-header" style="margin-top: var(--spacing-xl);">
+                <div class="panel-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                        <line x1="16" y1="13" x2="8" y2="13" />
+                        <line x1="16" y1="17" x2="8" y2="17" />
+                        <polyline points="10 9 9 9 8 9" />
+                    </svg>
+                </div>
+                <h2 class="panel-title">Policy Upload</h2>
+            </div>
+
+            <!-- Upload Card -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-number">1</span>
+                    <h3 class="card-title">Upload Policy Documents</h3>
+                </div>
+                <p class="card-description">Upload PDF policy documents to compile into a knowledge graph</p>
+                
+                <div class="upload-zone" id="drop-zone">
+                    <input type="file" id="file-input" multiple accept=".pdf" class="hidden" style="display: none;">
+                    <label for="file-input" style="cursor: pointer; display: block;">
+                        <div class="upload-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                <polyline points="17 8 12 3 7 8" />
+                                <line x1="12" y1="3" x2="12" y2="15" />
+                            </svg>
+                        </div>
+                        <div class="upload-text">
+                            <span class="upload-text-highlight">Click to upload</span> or drag and drop
+                        </div>
+                        <div class="upload-hint">PDF files only</div>
+                    </label>
+                    <div class="file-list" id="file-list"></div>
+                </div>
+                
+                <button id="compile-btn" class="btn btn-primary" disabled style="margin-top: 16px;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="5 3 19 12 5 21 5 3" />
+                    </svg>
+                    Start Compilation
+                </button>
+            </div>
+
+            <!-- Progress Card -->
+            <div class="card progress-section" id="status-card">
+                <div class="card-header">
+                    <span class="card-number">2</span>
+                    <h3 class="card-title">Compilation Progress</h3>
+                </div>
+                
+                <div class="progress-header">
+                    <span class="progress-status" id="status-text">Initializing...</span>
+                    <span class="progress-percent" id="progress-percent">0%</span>
+                </div>
+                <div class="progress-bar-container">
+                    <div class="progress-bar" id="progress-bar" style="width: 0%"></div>
+                </div>
+
+                <!-- Pipeline Steps -->
+                <div class="pipeline-steps" id="pipeline-steps">
+                    <div class="pipeline-step" data-step="parsing">
+                        <div class="step-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                <polyline points="14 2 14 8 20 8" />
+                            </svg>
+                        </div>
+                        <div class="step-content">
+                            <div class="step-name">Document Parsing</div>
+                            <div class="step-description">Extracting text from PDF documents</div>
+                        </div>
+                        <span class="step-status">Pending</span>
+                    </div>
+                    <div class="pipeline-step" data-step="ontology">
+                        <div class="step-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10" />
+                                <path d="M12 16v-4M12 8h.01" />
+                            </svg>
+                        </div>
+                        <div class="step-content">
+                            <div class="step-name">Ontology Design</div>
+                            <div class="step-description">Designing graph schema with Gemini</div>
+                        </div>
+                        <span class="step-status">Pending</span>
+                    </div>
+                    <div class="pipeline-step" data-step="extraction">
+                        <div class="step-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="16 18 22 12 16 6" />
+                                <polyline points="8 6 2 12 8 18" />
+                            </svg>
+                        </div>
+                        <div class="step-content">
+                            <div class="step-name">Entity Extraction</div>
+                            <div class="step-description">Extracting entities & relationships</div>
+                        </div>
+                        <span class="step-status">Pending</span>
+                    </div>
+                    <div class="pipeline-step" data-step="validation">
+                        <div class="step-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                                <polyline points="22 4 12 14.01 9 11.01" />
+                            </svg>
+                        </div>
+                        <div class="step-content">
+                            <div class="step-name">Critic Validation</div>
+                            <div class="step-description">Validating extraction quality</div>
+                        </div>
+                        <span class="step-status">Pending</span>
+                    </div>
+                    <div class="pipeline-step" data-step="building">
+                        <div class="step-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <ellipse cx="12" cy="5" rx="9" ry="3" />
+                                <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
+                                <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+                            </svg>
+                        </div>
+                        <div class="step-content">
+                            <div class="step-name">Graph Building</div>
+                            <div class="step-description">Constructing Neo4j knowledge graph</div>
+                        </div>
+                        <span class="step-status">Pending</span>
+                    </div>
+                </div>
+
+                <!-- Logs -->
+                <div class="logs-container" id="logs" style="margin-top: 16px;">
+                    <div class="log-entry">
+                        <span class="log-time">--:--:--</span>
+                        <span class="log-message">Waiting for compilation to start...</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Right Panel: Graph Visualization -->
+        <section class="panel graph-panel">
+            <div class="panel-header">
+                <div class="panel-icon" style="background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="18" cy="5" r="3" />
+                        <circle cx="6" cy="12" r="3" />
+                        <circle cx="18" cy="19" r="3" />
+                        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+                        <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+                    </svg>
+                </div>
+                <h2 class="panel-title">Knowledge Graph</h2>
+                <div class="graph-stats" id="graph-stats">
+                    Nodes: <span id="node-count">0</span> | Edges: <span id="edge-count">0</span>
+                </div>
+            </div>
+
+            <div class="graph-container" id="graph-container">
+                <div id="mynetwork"></div>
+                <div class="empty-state" id="empty-state">
+                    <div class="empty-state-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <circle cx="18" cy="5" r="3" />
+                            <circle cx="6" cy="12" r="3" />
+                            <circle cx="18" cy="19" r="3" />
+                            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+                            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+                        </svg>
+                    </div>
+                    <h3 class="empty-state-title">No Graph Data</h3>
+                    <p class="empty-state-description">Upload a policy document and compile, or click "Visualize Graph" to view existing data</p>
+                </div>
+            </div>
+
+            <div class="graph-hint">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="display: inline; vertical-align: middle; margin-right: 4px;">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M12 16v-4M12 8h.01" />
+                </svg>
+                Scroll to zoom • Drag to pan • Click nodes for details
+            </div>
+        </section>
+    </main>
 
     <script>
         // DOM Elements
         const fileInput = document.getElementById('file-input');
         const fileList = document.getElementById('file-list');
+        const dropZone = document.getElementById('drop-zone');
         const compileBtn = document.getElementById('compile-btn');
         const statusCard = document.getElementById('status-card');
-        const vizExistingCard = document.getElementById('viz-existing-card');
         const progressBar = document.getElementById('progress-bar');
         const progressPercent = document.getElementById('progress-percent');
         const statusText = document.getElementById('status-text');
         const logsDiv = document.getElementById('logs');
         const vizBtn = document.getElementById('viz-btn');
-        const graphStats = document.getElementById('graph-stats');
+        const nodeCount = document.getElementById('node-count');
+        const edgeCount = document.getElementById('edge-count');
+        const emptyState = document.getElementById('empty-state');
+        const pipelineSteps = document.querySelectorAll('.pipeline-step');
 
         let currentJobId = null;
         let pollInterval = null;
 
+        // Drag & Drop
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('drag-over');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('drag-over');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-over');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                fileInput.files = files;
+                updateFileList(files);
+            }
+        });
+
         // File Selection
         fileInput.addEventListener('change', (e) => {
-            const files = Array.from(e.target.files);
-            fileList.innerHTML = files.map(f => `<div>📄 ${f.name}</div>`).join('');
-            compileBtn.disabled = files.length === 0;
+            updateFileList(e.target.files);
         });
+
+        function updateFileList(files) {
+            const fileArray = Array.from(files);
+            if (fileArray.length === 0) {
+                fileList.innerHTML = '';
+                compileBtn.disabled = true;
+                return;
+            }
+
+            fileList.innerHTML = fileArray.map(f => `
+                <div class="file-item">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                    </svg>
+                    ${f.name}
+                </div>
+            `).join('');
+            compileBtn.disabled = false;
+        }
 
         // Compile Button
         compileBtn.addEventListener('click', async () => {
@@ -149,9 +359,13 @@
 
             // UI Reset
             compileBtn.disabled = true;
-            statusCard.classList.remove('hidden');
-            logsDiv.innerHTML = '<div>Starting upload...</div>';
+            statusCard.classList.add('visible');
+            resetPipelineSteps();
+            addLog('Starting upload...', 'info');
             progressBar.style.width = '0%';
+            progressPercent.textContent = '0%';
+            statusText.textContent = 'Uploading...';
+            statusText.className = 'progress-status';
 
             try {
                 const response = await fetch('/api/compile', {
@@ -163,23 +377,23 @@
 
                 const data = await response.json();
                 currentJobId = data.job_id;
-
+                addLog(`Job started: ${currentJobId}`, 'info');
                 startPolling();
 
             } catch (err) {
-                alert('Error: ' + err.message);
+                addLog('Error: ' + err.message, 'error');
                 compileBtn.disabled = false;
             }
         });
 
-        // Visualize Button (Direct)
+        // Visualize Button
         vizBtn.addEventListener('click', () => {
             loadGraph();
         });
 
         function startPolling() {
             if (pollInterval) clearInterval(pollInterval);
-            pollInterval = setInterval(checkStatus, 3000);
+            pollInterval = setInterval(checkStatus, 2000);
         }
 
         async function checkStatus() {
@@ -192,27 +406,38 @@
                 // Update Progress
                 const percent = data.progress || 0;
                 progressBar.style.width = `${percent}%`;
-                progressPercent.innerText = `${percent}%`;
-                statusText.innerText = `Status: ${data.status}`; // data.status.replace('_', ' ').toUpperCase();
+                progressPercent.textContent = `${percent}%`;
+                statusText.textContent = data.status.replace(/_/g, ' ').toUpperCase();
+
+                // Update pipeline steps based on progress
+                updatePipelineSteps(data.status, percent);
 
                 // Update Logs
-                if (data.logs) {
-                    logsDiv.innerHTML = data.logs.map(l => `<div>${l}</div>`).join('');
+                if (data.logs && data.logs.length > 0) {
+                    logsDiv.innerHTML = '';
+                    data.logs.forEach(log => addLog(log, 'info'));
                     logsDiv.scrollTop = logsDiv.scrollHeight;
                 }
 
                 if (data.status === 'completed') {
                     clearInterval(pollInterval);
-                    statusText.innerText = 'COMPLETED';
-                    statusText.classList.add('text-green-600', 'font-bold');
-                    vizExistingCard.classList.remove('hidden');
-                    loadGraph(); // Auto-load graph
+                    statusText.textContent = '✓ COMPLETED';
+                    statusText.classList.add('completed');
+                    addLog('Pipeline completed successfully!', 'info');
+                    loadGraph();
                     compileBtn.disabled = false;
+                    
+                    // Mark all steps as completed
+                    pipelineSteps.forEach(step => {
+                        step.classList.remove('active');
+                        step.classList.add('completed');
+                        step.querySelector('.step-status').textContent = 'Completed';
+                    });
                 } else if (data.status === 'failed') {
                     clearInterval(pollInterval);
-                    statusText.innerText = 'FAILED';
-                    statusText.classList.add('text-red-600', 'font-bold');
-                    alert('Job Failed: ' + data.error);
+                    statusText.textContent = '✗ FAILED';
+                    statusText.classList.add('failed');
+                    addLog('Pipeline failed: ' + (data.error || 'Unknown error'), 'error');
                     compileBtn.disabled = false;
                 }
 
@@ -221,60 +446,183 @@
             }
         }
 
+        function updatePipelineSteps(status, percent) {
+            // Reset all steps
+            pipelineSteps.forEach(step => {
+                step.classList.remove('active', 'completed');
+                step.querySelector('.step-status').textContent = 'Pending';
+            });
+
+            // Determine current step based on progress
+            const steps = ['parsing', 'ontology', 'extraction', 'validation', 'building'];
+            const stepIndex = Math.min(Math.floor(percent / 20), 4);
+
+            steps.forEach((stepName, index) => {
+                const step = document.querySelector(`[data-step="${stepName}"]`);
+                if (index < stepIndex) {
+                    step.classList.add('completed');
+                    step.querySelector('.step-status').textContent = 'Completed';
+                } else if (index === stepIndex && percent < 100) {
+                    step.classList.add('active');
+                    step.querySelector('.step-status').textContent = 'Processing...';
+                }
+            });
+        }
+
+        function resetPipelineSteps() {
+            pipelineSteps.forEach(step => {
+                step.classList.remove('active', 'completed');
+                step.querySelector('.step-status').textContent = 'Pending';
+            });
+        }
+
+        function addLog(message, type = 'info') {
+            const time = new Date().toLocaleTimeString('en-US', {
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+
+            const logEntry = document.createElement('div');
+            logEntry.className = 'log-entry';
+            logEntry.innerHTML = `
+                <span class="log-time">${time}</span>
+                <span class="log-message ${type}">${message}</span>
+            `;
+            logsDiv.appendChild(logEntry);
+            logsDiv.scrollTop = logsDiv.scrollHeight;
+        }
+
         async function loadGraph() {
             try {
+                emptyState.style.display = 'none';
+                addLog('Loading graph data...', 'info');
+                
                 const response = await fetch('/api/graph');
                 const data = await response.json();
-                renderGraph(data);
+                
+                if (data.nodes && data.nodes.length > 0) {
+                    renderGraph(data);
+                    addLog(`Graph loaded: ${data.nodes.length} nodes, ${data.edges.length} edges`, 'info');
+                } else {
+                    emptyState.style.display = 'flex';
+                    addLog('No graph data available', 'warning');
+                }
             } catch (err) {
                 console.error("Graph fetch error", err);
-                alert("Failed to load graph data");
+                addLog('Failed to load graph: ' + err.message, 'error');
+                emptyState.style.display = 'flex';
             }
         }
 
         function renderGraph(data) {
             const container = document.getElementById('mynetwork');
+            emptyState.style.display = 'none';
 
-            // Stats
-            graphStats.innerText = `Nodes: ${data.nodes.length} | Edges: ${data.edges.length}`;
+            // Update stats
+            nodeCount.textContent = data.nodes.length;
+            edgeCount.textContent = data.edges.length;
 
             const options = {
                 nodes: {
                     shape: 'dot',
-                    size: 16,
-                    font: { size: 14, color: '#333' },
-                    borderWidth: 2
+                    size: 20,
+                    font: { 
+                        size: 14, 
+                        color: '#ffffff',
+                        face: 'Inter'
+                    },
+                    borderWidth: 2,
+                    color: {
+                        background: '#6366f1',
+                        border: '#8b5cf6',
+                        highlight: {
+                            background: '#8b5cf6',
+                            border: '#a78bfa'
+                        }
+                    }
                 },
                 edges: {
-                    width: 1,
-                    smooth: { type: 'continuous' },
-                    color: { inherit: 'from', opacity: 0.6 }
+                    width: 2,
+                    smooth: { 
+                        type: 'continuous',
+                        roundness: 0.5
+                    },
+                    color: { 
+                        color: 'rgba(99, 102, 241, 0.4)',
+                        highlight: 'rgba(139, 92, 246, 0.8)'
+                    },
+                    font: {
+                        size: 11,
+                        color: '#a0a0b0',
+                        face: 'Inter'
+                    }
                 },
                 physics: {
-                    stabilization: false,
+                    stabilization: { iterations: 100 },
                     barnesHut: {
-                        gravitationalConstant: -8000,
-                        springConstant: 0.04,
-                        springLength: 95
+                        gravitationalConstant: -5000,
+                        springConstant: 0.02,
+                        springLength: 150
                     }
                 },
                 interaction: {
                     tooltipDelay: 200,
-                    hideEdgesOnDrag: true
+                    hideEdgesOnDrag: true,
+                    hover: true
+                },
+                layout: {
+                    improvedLayout: true
                 }
             };
 
-            const network = new vis.Network(container, data, options);
+            // Color nodes by type if label contains type info
+            const coloredNodes = data.nodes.map(node => {
+                const colors = {
+                    'Policy': '#6366f1',
+                    'Rule': '#22c55e',
+                    'Category': '#f59e0b',
+                    'Condition': '#3b82f6',
+                    'Exception': '#ef4444'
+                };
+                
+                let nodeColor = '#6366f1';
+                for (const [type, color] of Object.entries(colors)) {
+                    if (node.label && node.label.includes(type)) {
+                        nodeColor = color;
+                        break;
+                    }
+                }
+                
+                return {
+                    ...node,
+                    color: {
+                        background: nodeColor,
+                        border: nodeColor,
+                        highlight: {
+                            background: nodeColor,
+                            border: '#ffffff'
+                        }
+                    }
+                };
+            });
+
+            const network = new vis.Network(container, { nodes: coloredNodes, edges: data.edges }, options);
 
             network.on("click", function (params) {
                 if (params.nodes.length > 0) {
                     const nodeId = params.nodes[0];
                     const node = data.nodes.find(n => n.id === nodeId);
                     console.log("Clicked node:", node);
-                    // Could show details modal here
                 }
             });
         }
+
+        // Initialize - hide empty state initially
+        document.addEventListener('DOMContentLoaded', () => {
+            emptyState.style.display = 'flex';
+        });
     </script>
 </body>
 
