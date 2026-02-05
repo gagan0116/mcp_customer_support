@@ -961,7 +961,13 @@ Extract all order and customer details from the text above."""
                 print(f"   Order was found using: {fuzzy_tools_used}")
                 print(f"   Verified order saved. Skipping automatic adjudication.")
                 
-                yield {"step": "verification", "status": "complete", "log": f"⚠️ Fuzzy match used: {fuzzy_tools_used} - Human review required", "data": {"fuzzy_tools_used": fuzzy_tools_used}}
+                # Include the suggested order in the SSE event so UI can display it
+                yield {"step": "verification", "status": "complete", "log": f"⚠️ Fuzzy match used: {fuzzy_tools_used} - Human review required", "data": {
+                    "fuzzy_tools_used": fuzzy_tools_used,
+                    "suggested_order": verified_record,
+                    "needs_human_review": True,
+                    "confidence": "low"
+                }}
                 yield {"step": "adjudication", "status": "complete", "log": "⏭️ Skipping adjudication - requires human review", "data": None}
                 yield {"step": "decision", "status": "complete", "log": "⚠️ DECISION: PENDING_REVIEW (fuzzy match)", "data": {
                     "decision": "PENDING_REVIEW",

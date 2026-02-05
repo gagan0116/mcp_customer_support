@@ -545,8 +545,30 @@ function updateStepData(step, data) {
             break;
 
         case 'verification':
-            if (data.order_id) {
-                // Could update verification details panel if it exists
+            // Handle fuzzy match / manual review case with suggested order
+            if (data.suggested_order) {
+                state.verifiedData = data.suggested_order;
+                state.verifiedData._needs_review = true;
+                state.verifiedData._fuzzy_tools = data.fuzzy_tools_used;
+                state.verifiedData._confidence = data.confidence || 'low';
+                
+                // Update verification result UI to show review state
+                const verificationResult = document.getElementById('verificationResult');
+                if (verificationResult) {
+                    verificationResult.classList.add('review');
+                    verificationResult.classList.remove('success');
+                    const statusEl = verificationResult.querySelector('.verification-status');
+                    const detailsEl = verificationResult.querySelector('.verification-details');
+                    const iconEl = verificationResult.querySelector('.verification-icon');
+                    if (statusEl) statusEl.textContent = 'Suggested Order - Review Required';
+                    if (detailsEl) detailsEl.textContent = `Found via: ${data.fuzzy_tools_used.join(', ')} | Confidence: ${data.confidence || 'low'}`;
+                    if (iconEl) {
+                        iconEl.classList.remove('success');
+                        iconEl.classList.add('review');
+                    }
+                }
+            } else if (data.order_id) {
+                // Direct match - could update verification details panel if it exists
             }
             break;
 
@@ -753,10 +775,24 @@ function resetVerificationSubsteps() {
     // Clear tracking
     Object.keys(verificationSubsteps).forEach(key => delete verificationSubsteps[key]);
 
-    // Hide the verification result
+    // Hide and reset the verification result
     const resultEl = document.getElementById('verificationResult');
     if (resultEl) {
         resultEl.style.display = 'none';
+        resultEl.classList.remove('review');
+        
+        // Reset icon state
+        const iconEl = resultEl.querySelector('.verification-icon');
+        if (iconEl) {
+            iconEl.classList.remove('review');
+            iconEl.classList.add('success');
+        }
+        
+        // Reset text
+        const statusEl = resultEl.querySelector('.verification-status');
+        const detailsEl = resultEl.querySelector('.verification-details');
+        if (statusEl) statusEl.textContent = 'Order Verified';
+        if (detailsEl) detailsEl.textContent = 'Customer & order matched in database';
     }
 }
 
@@ -835,7 +871,12 @@ function handleViewJson(type) {
         // Show the actual verified record from database (captured from SSE events)
         if (state.verifiedData) {
             data = state.verifiedData;
-            title = 'Verified Order Data (from Database)';
+            // Check if this is a suggested order needing review
+            if (state.verifiedData._needs_review) {
+                title = `Suggested Order (Needs Review) - Confidence: ${state.verifiedData._confidence || 'low'}`;
+            } else {
+                title = 'Verified Order Data (from Database)';
+            }
         } else {
             // Fallback if verification hasn't run yet
             data = {

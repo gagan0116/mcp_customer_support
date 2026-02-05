@@ -1102,10 +1102,31 @@ body {
     background: rgba(34, 197, 94, 0.2);
 }
 
+.verification-icon.review {
+    background: rgba(245, 158, 11, 0.2);
+}
+
 .verification-icon svg {
     width: 16px;
     height: 16px;
     color: var(--success);
+}
+
+.verification-icon.review svg {
+    color: var(--warning, #f59e0b);
+}
+
+/* Show/hide icons based on state */
+.verification-icon .icon-review {
+    display: none;
+}
+
+.verification-icon.review .icon-success {
+    display: none;
+}
+
+.verification-icon.review .icon-review {
+    display: block;
 }
 
 .verification-text {
@@ -1117,6 +1138,16 @@ body {
     font-size: var(--font-size-xs);
     font-weight: 600;
     color: var(--success);
+}
+
+/* Review state for verification result */
+.verification-result.review .verification-status {
+    color: var(--warning, #f59e0b);
+}
+
+.verification-result.review .verification-details {
+    color: var(--warning, #f59e0b);
+    opacity: 0.8;
 }
 
 .verification-details {
