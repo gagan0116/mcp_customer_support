@@ -9,7 +9,8 @@
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
     <!-- Vis.js for Graph Visualization -->
     <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
@@ -38,7 +39,7 @@
                 </div>
             </div>
             <nav class="header-nav">
-                <a href="https://storage.googleapis.com/mcp_frontend/index.html" class="nav-link">
+                <a href="/" class="nav-link">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
                     </svg>
@@ -115,7 +116,7 @@
                     <h3 class="card-title">Upload Policy Documents</h3>
                 </div>
                 <p class="card-description">Upload PDF policy documents to compile into a knowledge graph</p>
-                
+
                 <div class="upload-zone" id="drop-zone">
                     <input type="file" id="file-input" multiple accept=".pdf" class="hidden" style="display: none;">
                     <label for="file-input" style="cursor: pointer; display: block;">
@@ -133,7 +134,7 @@
                     </label>
                     <div class="file-list" id="file-list"></div>
                 </div>
-                
+
                 <button id="compile-btn" class="btn btn-primary" disabled style="margin-top: 16px;">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polygon points="5 3 19 12 5 21 5 3" />
@@ -148,7 +149,7 @@
                     <span class="card-number">2</span>
                     <h3 class="card-title">Compilation Progress</h3>
                 </div>
-                
+
                 <div class="progress-header">
                     <span class="progress-status" id="status-text">Initializing...</span>
                     <span class="progress-percent" id="progress-percent">0%</span>
@@ -268,12 +269,14 @@
                         </svg>
                     </div>
                     <h3 class="empty-state-title">No Graph Data</h3>
-                    <p class="empty-state-description">Upload a policy document and compile, or click "Visualize Graph" to view existing data</p>
+                    <p class="empty-state-description">Upload a policy document and compile, or click "Visualize Graph"
+                        to view existing data</p>
                 </div>
             </div>
 
             <div class="graph-hint">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="display: inline; vertical-align: middle; margin-right: 4px;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"
+                    style="display: inline; vertical-align: middle; margin-right: 4px;">
                     <circle cx="12" cy="12" r="10" />
                     <path d="M12 16v-4M12 8h.01" />
                 </svg>
@@ -283,6 +286,9 @@
     </main>
 
     <script>
+        // API Base URL - Cloud Run service
+        const API_BASE = 'https://policy-compiler-171083103370.northamerica-northeast1.run.app';
+
         // DOM Elements
         const fileInput = document.getElementById('file-input');
         const fileList = document.getElementById('file-list');
@@ -368,7 +374,7 @@
             statusText.className = 'progress-status';
 
             try {
-                const response = await fetch('/api/compile', {
+                const response = await fetch(`${API_BASE}/api/compile`, {
                     method: 'POST',
                     body: formData
                 });
@@ -400,7 +406,7 @@
             if (!currentJobId) return;
 
             try {
-                const response = await fetch(`/api/status/${currentJobId}`);
+                const response = await fetch(`${API_BASE}/api/status/${currentJobId}`);
                 const data = await response.json();
 
                 // Update Progress
@@ -426,7 +432,7 @@
                     addLog('Pipeline completed successfully!', 'info');
                     loadGraph();
                     compileBtn.disabled = false;
-                    
+
                     // Mark all steps as completed
                     pipelineSteps.forEach(step => {
                         step.classList.remove('active');
@@ -498,10 +504,10 @@
             try {
                 emptyState.style.display = 'none';
                 addLog('Loading graph data...', 'info');
-                
-                const response = await fetch('/api/graph');
+
+                const response = await fetch(`${API_BASE}/api/graph`);
                 const data = await response.json();
-                
+
                 if (data.nodes && data.nodes.length > 0) {
                     renderGraph(data);
                     addLog(`Graph loaded: ${data.nodes.length} nodes, ${data.edges.length} edges`, 'info');
@@ -528,8 +534,8 @@
                 nodes: {
                     shape: 'dot',
                     size: 20,
-                    font: { 
-                        size: 14, 
+                    font: {
+                        size: 14,
                         color: '#ffffff',
                         face: 'Inter'
                     },
@@ -545,11 +551,11 @@
                 },
                 edges: {
                     width: 2,
-                    smooth: { 
+                    smooth: {
                         type: 'continuous',
                         roundness: 0.5
                     },
-                    color: { 
+                    color: {
                         color: 'rgba(99, 102, 241, 0.4)',
                         highlight: 'rgba(139, 92, 246, 0.8)'
                     },
@@ -586,7 +592,7 @@
                     'Condition': '#3b82f6',
                     'Exception': '#ef4444'
                 };
-                
+
                 let nodeColor = '#6366f1';
                 for (const [type, color] of Object.entries(colors)) {
                     if (node.label && node.label.includes(type)) {
@@ -594,7 +600,7 @@
                         break;
                     }
                 }
-                
+
                 return {
                     ...node,
                     color: {

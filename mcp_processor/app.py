@@ -33,11 +33,7 @@ app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://storage.googleapis.com",
-        "http://localhost:3000",
-        "http://localhost:5500",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:5500",
+        "https://vara-483300.web.app"
     ],
     allow_credentials=True,
     allow_methods=["*"],
