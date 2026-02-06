@@ -33,7 +33,7 @@ app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://vara-483300.web.app"
+        "https://vara-ai.com"
     ],
     allow_credentials=True,
     allow_methods=["*"],
