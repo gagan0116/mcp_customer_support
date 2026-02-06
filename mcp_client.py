@@ -367,7 +367,7 @@ Extract all order and customer details from the text above."""
             
             STEP 1: IDENTITY CHECK
             - Call 'verify_from_email_matches_customer' with the customer_email.
-            - IF 'matched' is False: Call llm _find_orders. Output "Request sent for Human Review" and terminate.
+            - IF 'matched' is False: Call llm_find_orders. If llm_find_orders returns rows, include the first row in 'verified_data'. Output "Request sent for Human Review" and terminate.
             - IF 'matched' is True: Proceed to Step 2.
             
             STEP 2: FIND ORDER (Hierarchical Search)

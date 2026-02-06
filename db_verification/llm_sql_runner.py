@@ -180,13 +180,24 @@ def _normalize_sql(s: str) -> str:
     return " ".join((s or "").strip().split())
 
 
+def _is_valid_value(val: Any) -> bool:
+    """
+    Check if a value is actually usable (not None, not empty, not string 'null').
+    """
+    if val is None:
+        return False
+    if isinstance(val, str):
+        return val.strip().lower() not in ("", "null", "none", "n/a")
+    return True
+
+
 def _desired_limit(email_info: Dict[str, Any], max_limit: int) -> int:
     """
     Deterministic shortlist policy:
     - If strong identifiers exist, we only want 1.
     - Otherwise keep a small shortlist.
     """
-    if email_info.get("invoice_number") or email_info.get("order_invoice_id"):
+    if _is_valid_value(email_info.get("invoice_number")) or _is_valid_value(email_info.get("order_invoice_id")):
         return 1
     return min(5, max_limit)
 
