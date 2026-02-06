@@ -1,17 +1,26 @@
-# VARA.ai - AI-Powered Customer Support Automation
+# VARA.ai
 
 ![Gemini 3](https://img.shields.io/badge/Gemini%203-Powered-blue?style=for-the-badge&logo=google)
 ![Python](https://img.shields.io/badge/Python-3.11+-green?style=for-the-badge&logo=python)
 ![MCP](https://img.shields.io/badge/MCP-Model%20Context%20Protocol-purple?style=for-the-badge)
 ![Multi-Agent](https://img.shields.io/badge/Multi--Agent-5%20Agents-orange?style=for-the-badge)
+![Neo4j](https://img.shields.io/badge/Neo4j-Aura-008CC1?style=for-the-badge&logo=neo4j)
 
-> **Google DeepMind Gemini 3 Hackathon Submission**
+> **A multi-agent customer support platform built with Gemini 3, Neo4j, and MCP that delivers verified refund decisions with grounded, explainable reasoning from a policy knowledge graph.**
+
+### 🏆 Google DeepMind Gemini 3 Hackathon Submission
+
+---
 
 ## 🚀 Live Demo
 
-- **Live Application:** [https://storage.googleapis.com/mcp_frontend/index.html](https://storage.googleapis.com/mcp_frontend/index.html)
-- **Policy Compiler:** [https://policy-compiler-171083103370.northamerica-northeast1.run.app](https://policy-compiler-171083103370.northamerica-northeast1.run.app)
-- **Demo Video:** [YouTube Demo](#) <!-- Add your YouTube link here -->
+| | |
+|---|---|
+| **Demo URL** | [https://storage.googleapis.com/mcp_frontend/index.html](https://storage.googleapis.com/mcp_frontend/index.html) |
+| **Policy Compiler** | [https://policy-compiler-171083103370.northamerica-northeast1.run.app](https://policy-compiler-171083103370.northamerica-northeast1.run.app) |
+| **Demo Video** | [YouTube Demo](#) <!-- Add your YouTube link here --> |
+
+> **No login required.** The demo is publicly accessible.
 
 ---
 
@@ -42,67 +51,65 @@ VARA.ai is an end-to-end AI system that:
 
 ## 🧠 Gemini 3 Integration
 
-| Feature | Model Used | Purpose |
-|---------|------------|---------|
+| Feature | Model | Purpose |
+|---------|-------|---------|
 | **Extended Thinking** | `gemini-3-pro-preview` | Multi-step policy adjudication with `thinking_level="high"` |
 | **Structured Output** | `gemini-2.5-flash` | JSON schema extraction for order details |
 | **Image Understanding** | `gemini-2.0-flash` | Invoice/receipt parsing via Gemini Vision |
 | **Classification** | `gemini-3-flash-preview` | Email intent classification (REFUND/RETURN/REPLACEMENT) |
 | **Ontology Design** | `gemini-2.5-flash` | Policy knowledge graph schema generation |
 
-### Key Gemini 3 Features Used:
-- `ThinkingConfig(thinking_level="high")` - Extended reasoning for complex decisions
-- `response_schema` - Guaranteed structured JSON outputs
-- `response_mime_type="application/json"` - Reliable parsing
-- `system_instruction` - Agent persona and behavior control
-- **Gemini Vision** - Multi-modal invoice/attachment processing
+### Key Gemini 3 Features Used
+```
+ThinkingConfig(thinking_level="high")  →  Extended reasoning for complex decisions
+response_schema                        →  Guaranteed structured JSON outputs
+response_mime_type="application/json"  →  Reliable parsing
+system_instruction                     →  Agent persona and behavior control
+Gemini Vision                          →  Multi-modal invoice/attachment processing
+```
 
 ---
 
 ## 🤖 Multi-Agent Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    POLICY COMPILER PIPELINE                      │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│   ┌──────────────┐    ┌──────────────┐    ┌──────────────┐     │
-│   │   Ontology   │───▶│  Extraction  │───▶│    Critic    │     │
-│   │    Agent     │    │    Agent     │    │    Agent     │     │
-│   │              │    │              │    │              │     │
-│   │ Designs      │    │ Extracts     │    │ Validates    │     │
-│   │ Knowledge    │    │ Policy       │    │ & Suggests   │     │
-│   │ Graph Schema │    │ Entities     │    │ Improvements │     │
-│   └──────────────┘    └──────────────┘    └──────┬───────┘     │
-│                                                   │              │
-│                                           ┌──────▼───────┐      │
-│                                           │   Builder    │      │
-│                                           │    Agent     │      │
-│                                           │              │      │
-│                                           │ Constructs   │      │
-│                                           │ Neo4j Graph  │      │
-│                                           └──────────────┘      │
-└─────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────┐
-│                    REQUEST PROCESSING                            │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│   ┌──────────────┐                                              │
-│   │ Adjudicator  │  Uses Extended Thinking (thinking_level=high)│
-│   │    Agent     │  to traverse policy graph and make decisions │
-│   │              │  with full reasoning transparency             │
-│   └──────────────┘                                              │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph PolicyCompiler["📚 Policy Compiler Pipeline"]
+        direction LR
+        PDF["📄 Policy PDFs"] --> Parse["LlamaParse"]
+        Parse --> Ontology["🧠 Ontology Agent<br/><i>Designs graph schema</i>"]
+        Ontology --> Extract["📤 Extraction Agent<br/><i>Extracts entities & rules</i>"]
+        Extract --> Critic["🔍 Critic Agent<br/><i>Validates quality</i>"]
+        Critic --> Builder["🔨 Builder Agent<br/><i>Constructs Neo4j graph</i>"]
+        Builder --> Graph[("🔷 Neo4j<br/>Knowledge Graph")]
+    end
+    
+    subgraph Processing["⚙️ Request Processing"]
+        Email["📧 Customer Email"] --> Classify["Classify Intent"]
+        Classify --> ExtractOrder["Extract Order Details"]
+        ExtractOrder --> Verify["Verify in Database"]
+        Verify --> Adjudicator["⚖️ Adjudicator Agent<br/><i>Extended Thinking</i><br/><i>thinking_level=high</i>"]
+        Graph -.->|"Query policies"| Adjudicator
+        Adjudicator --> Decision["✅ Grounded Decision<br/>with Explanation"]
+    end
+    
+    style Ontology fill:#E3F2FD
+    style Extract fill:#E8F5E9
+    style Critic fill:#FFF3E0
+    style Builder fill:#FCE4EC
+    style Adjudicator fill:#F3E5F5
+    style Graph fill:#E1F5FE
 ```
 
-**5 Specialized Agents:**
-1. **Ontology Agent** - Designs knowledge graph schema from policy documents
-2. **Extraction Agent** - Extracts policy rules, conditions, and relationships
-3. **Critic Agent** - Validates extraction quality and suggests improvements
-4. **Builder Agent** - Constructs Neo4j knowledge graph with Cypher queries
-5. **Adjudicator Agent** - Makes refund decisions using extended thinking
+### 5 Specialized Agents
+
+| Agent | Role | Gemini Feature |
+|-------|------|----------------|
+| **Ontology Agent** | Designs knowledge graph schema from policy documents | Structured Output |
+| **Extraction Agent** | Extracts policy rules, conditions, and relationships | JSON Schema |
+| **Critic Agent** | Validates extraction quality and suggests improvements | System Instruction |
+| **Builder Agent** | Constructs Neo4j knowledge graph with Cypher queries | Structured Output |
+| **Adjudicator Agent** | Makes refund decisions with full reasoning | Extended Thinking |
 
 ---
 
@@ -110,60 +117,93 @@ VARA.ai is an end-to-end AI system that:
 
 VARA.ai uses **FastMCP** to create modular, tool-based AI capabilities:
 
-| MCP Server | Purpose | Key Tools |
-|------------|---------|-----------|
-| `db_verification_server` | Order database access | `find_order_by_invoice_number`, `verify_from_email_matches_customer` |
-| `neo4j_graph_engine` | Policy knowledge graph | `execute_cypher_query`, `create_node`, `create_relationship` |
-| `policy_engine` | PDF document parsing | `parse_all_policy_documents` |
+### `db_verification_server` — Order Database Access
+| Tool | Description |
+|------|-------------|
+| `list_orders_by_customer_email` | Fetch order history for a customer email |
+| `find_order_by_invoice_number` | Lookup single order with full details |
+| `find_order_by_order_invoice_id` | Alternative lookup by order_invoice_id |
+| `list_order_items_by_order_invoice_id` | Get line items for an order |
+| `verify_from_email_matches_customer` | Check if email exists in customers table |
+| `get_customer_orders_with_items` | Deep fetch with order items |
+| `select_order_id` | LLM-assisted order matching |
+| `llm_find_orders` | Generate SQL from natural language |
+
+### `neo4j_graph_engine` — Policy Knowledge Graph
+| Tool | Description |
+|------|-------------|
+| `check_neo4j_connection` | Test database connectivity |
+| `get_graph_schema` | Retrieve node labels and relationships |
+| `get_graph_statistics` | Node/relationship counts |
+| `execute_cypher_query` | Run read-only Cypher queries |
+| `execute_cypher_write` | Run write Cypher (CREATE, MERGE) |
+| `execute_cypher_batch` | Bulk graph construction |
+| `create_node` | Create/merge a node with properties |
+| `create_relationship` | Create relationship between nodes |
+| `create_schema_constraints` | Set up indexes and constraints |
+| `clear_graph` | Delete all data (destructive) |
+| `validate_graph_integrity` | Check for missing citations, orphans |
+| `sample_graph_data` | Get sample nodes for verification |
+
+### `policy_engine` — PDF Document Parsing
+| Tool | Description |
+|------|-------------|
+| `parse_all_policy_documents` | Parse all PDFs in directory to combined Markdown |
+| `parse_single_policy_document` | Parse a single PDF document |
 
 ---
 
 ## 🛠️ Tech Stack
 
-### Core AI/ML
-| Technology | Purpose |
-|------------|---------|
-| Gemini 3 API | LLM backbone (classification, extraction, reasoning) |
-| google-genai | Official Python SDK for Gemini |
-| Multi-Agent System | 5 specialized agents for policy compilation |
+<table>
+<tr>
+<td>
 
-### Infrastructure
-| Technology | Purpose |
-|------------|---------|
-| Google Cloud Run | Serverless container deployment |
-| Google Cloud Pub/Sub | Event-driven email triggers |
-| Google Cloud Tasks | Async job queue |
-| Google Cloud SQL | PostgreSQL database |
-| Google Cloud Storage | Email/artifact storage |
-| Firestore | Gmail history state tracking |
-| Docker | Container packaging |
+**AI/ML**
+- Gemini 3 API
+- google-genai SDK
+- Multi-Agent System
 
-### Databases
-| Technology | Purpose |
-|------------|---------|
-| PostgreSQL (pg8000) | Customer orders & refund cases |
-| Neo4j Aura | Policy knowledge graph |
+</td>
+<td>
 
-### Frameworks
-| Technology | Purpose |
-|------------|---------|
-| FastAPI | REST API framework |
-| uvicorn | ASGI server |
-| FastMCP (mcp[cli]) | MCP server implementation |
-| SSE-Starlette | Server-sent events |
+**Databases**
+- PostgreSQL (pg8000)
+- Neo4j Aura
 
-### Document Processing
-| Technology | Purpose |
-|------------|---------|
-| LlamaParse | PDF policy document extraction |
-| pypdf | PDF utility operations |
-| BeautifulSoup4 | HTML parsing |
+</td>
+<td>
 
-### APIs & Auth
-| Technology | Purpose |
-|------------|---------|
-| Gmail API | Email monitoring & retrieval |
-| OAuth 2.0 | Google authentication |
+**Cloud (GCP)**
+- Cloud Run
+- Cloud Tasks
+- Pub/Sub
+- Cloud SQL
+- Cloud Storage
+- Firestore
+- Secret Manager
+
+</td>
+<td>
+
+**Frameworks**
+- FastAPI
+- uvicorn
+- FastMCP (mcp[cli])
+- SSE-Starlette
+
+</td>
+<td>
+
+**Processing**
+- LlamaParse
+- pypdf
+- BeautifulSoup4
+- Pillow
+
+</td>
+</tr>
+</table>
 
 ---
 
@@ -171,31 +211,78 @@ VARA.ai uses **FastMCP** to create modular, tool-based AI capabilities:
 
 ```
 mcp_customer_support/
-├── gmail-event-processor/    # Email ingestion (Cloud Run)
-│   ├── app.py                # FastAPI Pub/Sub endpoint
-│   ├── classifier.py         # Gemini email classification
-│   ├── gmail_processor.py    # Gmail API integration
-│   └── history_store.py      # Firestore state tracking
 │
-├── mcp_processor/            # Main processing (Cloud Run)
-│   ├── app.py                # Cloud Tasks endpoint
-│   └── processor.py          # MCPProcessor orchestrator
+├── gmail-event-processor/           # 📧 Email Ingestion Service (Cloud Run)
+│   ├── app.py                       # FastAPI Pub/Sub endpoint
+│   ├── classifier.py                # Gemini email classification
+│   ├── gmail_processor.py           # Gmail API integration
+│   ├── store_email.py               # GCS storage & Cloud Tasks queue
+│   ├── history_store.py             # Firestore state tracking
+│   ├── secret_manager.py            # Credentials management
+│   ├── Dockerfile
+│   └── requirements.txt
 │
-├── policy_compiler_agents/   # Multi-agent system
-│   ├── ontology_agent.py     # Knowledge graph schema design
-│   ├── extraction_agent.py   # Policy rule extraction
-│   ├── critic_agent.py       # Quality validation
-│   ├── builder_agent.py      # Neo4j graph construction
-│   └── adjudicator_agent.py  # Decision making with extended thinking
+├── mcp_processor/                   # ⚙️ Main Processing Service (Cloud Run)
+│   ├── app.py                       # Cloud Tasks endpoint
+│   ├── processor.py                 # MCPProcessor orchestrator
+│   ├── Dockerfile
+│   └── requirements.txt
 │
-├── db_verification/          # MCP Server - Database
-├── neo4j_graph_engine/       # MCP Server - Graph DB
-├── policy_engine/            # MCP Server - PDF Parser
-├── knowledge_base_server/    # Policy compiler web service
+├── policy_compiler_agents/          # 🤖 Multi-Agent System
+│   ├── agent.py                     # Pipeline orchestrator
+│   ├── ontology_agent.py            # Graph schema design
+│   ├── extraction_agent.py          # Entity & relationship extraction
+│   ├── critic_agent.py              # Quality validation
+│   ├── builder_agent.py             # Neo4j graph construction
+│   ├── adjudicator_agent.py         # Decision making (Extended Thinking)
+│   ├── graph_traversal.py           # Policy graph traversal
+│   ├── source_retrieval.py          # Citation lookup
+│   ├── visualize_graph.py           # Graph visualization
+│   ├── ingestion.py                 # Document ingestion
+│   └── tools.py                     # Shared utilities
 │
-├── policy_docs/              # Return policy PDFs
-├── artifacts/                # Processing outputs & evidence
-└── web_dashboard_ui/         # Frontend interface
+├── db_verification/                 # 🗄️ MCP Server - Database
+│   ├── db_verification_server.py    # MCP tools for order lookup
+│   ├── db.py                        # Cloud SQL connector
+│   └── llm_sql_runner.py            # Natural language SQL
+│
+├── neo4j_graph_engine/              # 🔷 MCP Server - Graph Database
+│   ├── mcp_server.py                # MCP tools for Neo4j operations
+│   └── db.py                        # Neo4j async driver
+│
+├── policy_engine/                   # 📄 MCP Server - PDF Parser
+│   └── mcp_server.py                # LlamaParse integration
+│
+├── knowledge_base_server/           # 🌐 Policy Compiler Web Service
+│   ├── main.py                      # FastAPI server with SSE
+│   ├── compiler_service.py          # Compilation orchestration
+│   └── static/                      # Web UI assets
+│
+├── web_dashboard_ui/                # 🖥️ Frontend Dashboard
+│   └── static/                      # HTML/CSS/JS assets
+│
+├── policy_docs/                     # 📚 Policy Documents
+│   ├── combined_policy.md           # Parsed policy content
+│   ├── combined_policy_index.json   # Citation index
+│   └── policy_pdfs/                 # Source PDF files
+│
+├── artifacts/                       # 📊 Processing Outputs
+│   └── knowledge_graph/             # Graph build artifacts
+│
+├── Sample_Database_Creation/        # 🔧 Database Setup Scripts
+│   ├── invoice.sql                  # Schema definitions
+│   └── process_invoices_update_db.py
+│
+├── scripts/                         # 🛠️ Utility Scripts
+│   ├── cloud_db_connect.py          # Database connection test
+│   └── setup_gmail_auth.py          # OAuth setup
+│
+├── mcp_client.py                    # 🧪 Interactive MCP client
+├── requirements.txt                 # Python dependencies
+├── Dockerfile                       # Container configuration
+├── cloudbuild.yaml                  # Gmail processor deployment
+├── cloudbuild_mcp_processor.yaml    # MCP processor deployment
+└── cloudbuild_policy_compiler.yaml  # Policy compiler deployment
 ```
 
 ---
@@ -205,7 +292,7 @@ mcp_customer_support/
 ### Prerequisites
 
 - Python 3.11+
-- Docker (optional, for containerized deployment)
+- Docker (optional)
 - Google Cloud account with enabled APIs
 - Neo4j Aura instance
 - LlamaParse API key
@@ -267,54 +354,70 @@ python main.py
 
 ## 🧪 Testing Instructions
 
-### For Judges - Live Demo
+### Demo URL
+**[https://storage.googleapis.com/mcp_frontend/index.html](https://storage.googleapis.com/mcp_frontend/index.html)**
 
-1. **Visit the live application:** [https://storage.googleapis.com/mcp_frontend/index.html](https://storage.googleapis.com/mcp_frontend/index.html)
-
-2. **Policy Compiler Demo:**
-   - Navigate to [Policy Compiler](https://policy-compiler-171083103370.northamerica-northeast1.run.app)
-   - Upload a return policy PDF
-   - Watch the multi-agent system build a knowledge graph
-   - View the interactive graph visualization
-
-3. **End-to-End Flow:**
-   - Send a refund request email with an invoice attachment
-   - System automatically classifies, extracts, verifies, and adjudicates
-   - View the decision with full reasoning transparency
-
-### Sample Test Scenarios
-
-| Scenario | Expected Outcome |
-|----------|------------------|
-| Electronics return within 30 days | APPROVED - Standard return window |
-| Perishable food item | DENIED - Non-returnable category |
-| Premium member after 45 days | APPROVED - Extended window for premium |
-| Missing invoice attachment | PARTIAL - Request more information |
+**No login required.** The demo is publicly accessible.
 
 ---
 
-## 📊 Sample Outputs
+### Feature 1: Email Processing Pipeline
 
-The `artifacts/` folder contains real processing examples:
+1. **Open the demo URL** — You'll land on the Email Pipeline page
 
-- `extracted_order.json` - Gemini's structured order extraction
-- `verified_order.json` - Database verification results
-- `adjudication_decision.json` - Final decision with reasoning
-- `knowledge_graph/graph_visualization.html` - Interactive policy graph
+2. **Select a scenario** from the "Select Demo Scenario" dropdown
+
+3. **View the request** — Email content and attached invoice displayed on the left panel
+
+4. **Click "Process Email Request"** to trigger the full AI pipeline
+
+5. **Watch the pipeline** execute in real-time (~1 minute to complete):
+   - Email Classification
+   - Order Extraction (Gemini Vision)
+   - Database Verification
+   - Policy Adjudication (Extended Thinking)
+   - Decision with Explanation
+
+> **Note:** In production, this pipeline runs automatically when a customer sends an email to `vara.assist@gmail.com`. The demo uses pre-defined scenarios because processing a real email requires the corresponding order to exist in our database. This website serves as a prototype to demonstrate the fully automated end-to-end pipeline.
 
 ---
 
-## 👥 Team
+### Feature 2: Policy Knowledge Base
 
-| Name | Role |
-|------|------|
-| Gagan | Developer |
+1. **Click "Policy Knowledge Base"** in the navigation bar
+
+#### Option A: View Existing Graph
+- Click **"Visualize Graph"** to view the pre-compiled knowledge graph (Best Buy return policy)
+- **Interactive controls:**
+  - Scroll to zoom
+  - Drag to pan
+  - Click nodes for details
+
+#### Option B: Compile New Policy (20-25 min)
+1. Upload any company's terms and conditions PDF
+2. Full compilation takes ~20-25 minutes (based on document length), orchestrated entirely by Gemini 3 Pro
+
+**The multi-agent system will automatically:**
+```
+📄 Parse PDF → Markdown (LlamaParse)
+        ↓
+🧠 Design graph schema (Ontology Agent)
+        ↓
+📤 Extract entities & relationships (Extraction Agent)
+        ↓
+🔍 Validate quality (Critic Agent)
+        ↓
+🔨 Build Neo4j graph (Builder Agent)
+```
 
 ---
 
-## 📄 License
+## 👥 Contributors
 
-MIT License - See LICENSE file for details
+| Name | GitHub |
+|------|--------|
+| **Gagan Vadlamudi** | [@gagan0116](https://github.com/gagan0116) |
+| **Naga Sai Satish Amara** | |
 
 ---
 
