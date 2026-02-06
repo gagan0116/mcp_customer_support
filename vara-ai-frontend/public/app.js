@@ -1329,13 +1329,31 @@ function initHLDModal() {
         }
     });
 
-    // Add keyboard navigation and hover behavior
+    // Add keyboard navigation and click-to-toggle behavior
     const steps = hldModal.querySelectorAll('.hld-step');
     steps.forEach((step, index) => {
-        // Auto-close other tooltips on hover
+        // Click-to-toggle tooltip on all screen sizes
+        step.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isActive = step.classList.contains('active');
+            // Close all other steps first
+            steps.forEach(s => s.classList.remove('active'));
+            // Toggle this step
+            if (!isActive) {
+                step.classList.add('active');
+                // On small screens, scroll the expanded step into view
+                if (window.innerWidth <= 1200) {
+                    setTimeout(() => {
+                        step.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    }, 100);
+                }
+            }
+        });
+
+        // On desktop, clear stale .active from other steps on hover
         step.addEventListener('mouseenter', () => {
-            if (document.activeElement && document.activeElement.classList.contains('hld-step') && document.activeElement !== step) {
-                document.activeElement.blur();
+            if (window.innerWidth > 1200) {
+                steps.forEach(s => { if (s !== step) s.classList.remove('active'); });
             }
         });
 
@@ -1346,10 +1364,16 @@ function initHLDModal() {
                 steps[index - 1].focus();
             } else if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
-                // Toggle tooltip visibility on Enter/Space
-                step.focus();
+                step.click();
             }
         });
+    });
+
+    // Close tooltip when clicking outside any step
+    hldModal.addEventListener('click', (e) => {
+        if (!e.target.closest('.hld-step')) {
+            steps.forEach(s => s.classList.remove('active'));
+        }
     });
 }
 
@@ -1359,10 +1383,15 @@ function openHLDModal() {
         hldModal.classList.remove('hidden');
         document.body.style.overflow = 'hidden'; // Prevent background scroll
 
-        // Focus first step for accessibility
+        // Auto-open first tooltip and focus
         const firstStep = hldModal.querySelector('.hld-step');
         if (firstStep) {
-            setTimeout(() => firstStep.focus(), 300); // Wait for animation
+            // Clear any previously active steps
+            hldModal.querySelectorAll('.hld-step.active').forEach(s => s.classList.remove('active'));
+            setTimeout(() => {
+                firstStep.classList.add('active');
+                firstStep.focus();
+            }, 300);
         }
 
         addLog('info', '📊 Opened system architecture diagram');
@@ -1374,6 +1403,8 @@ function closeHLDModal() {
     if (hldModal) {
         hldModal.classList.add('hidden');
         document.body.style.overflow = ''; // Restore scroll
+        // Clear any active tooltips
+        hldModal.querySelectorAll('.hld-step.active').forEach(s => s.classList.remove('active'));
     }
 }
 

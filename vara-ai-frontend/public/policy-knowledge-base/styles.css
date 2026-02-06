@@ -861,21 +861,21 @@ body {
 
 /* Scrollbar */
 ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    width: 8px;
+    height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.02);
+    background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 3px;
+    background: var(--border-color-light);
+    border-radius: var(--radius-full);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.2);
+    background: var(--text-muted);
 }
 
 /* ============================================
@@ -1061,25 +1061,28 @@ body {
 .help-link {
     display: flex;
     align-items: center;
-    gap: var(--spacing-xs);
-    color: var(--text-muted);
+    gap: var(--spacing-sm);
+    color: var(--text-secondary);
     font-size: var(--font-size-sm);
+    font-weight: 500;
     text-decoration: none;
-    padding: var(--spacing-xs) var(--spacing-sm);
-    border-radius: var(--radius-sm);
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-radius: var(--radius-md);
     transition: var(--transition-base);
     cursor: pointer;
-    margin-right: var(--spacing-md);
+    border: 1px solid transparent;
 }
 
 .help-link:hover {
     color: var(--text-primary);
-    background: var(--bg-tertiary);
+    background: rgba(255, 255, 255, 0.05);
+    border-color: var(--border-color);
 }
 
-.help-link svg {
-    width: 16px;
-    height: 16px;
+.help-link svg,
+.header-content .help-link svg {
+    width: 20px;
+    height: 20px;
 }
 
 /* Footer */
@@ -1167,12 +1170,14 @@ body {
     max-width: 1400px;
     max-height: 90vh;
     overflow: visible;
-    /* Allow tooltips to overflow */
+    /* Allow tooltips to overflow on desktop */
     box-shadow:
         0 0 60px rgba(99, 102, 241, 0.15),
         0 0 100px rgba(139, 92, 246, 0.1),
         inset 0 1px 0 rgba(255, 255, 255, 0.05);
     animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    display: flex;
+    flex-direction: column;
 }
 
 @keyframes slideUp {
@@ -1256,6 +1261,7 @@ body {
     padding-bottom: var(--spacing-2xl);
     overflow: visible;
     max-height: calc(90vh - 120px);
+    flex: 1;
 }
 
 /* Pipeline Container */
@@ -1268,36 +1274,9 @@ body {
     overflow: visible;
 }
 
-/* SVG Flow Lines */
+/* SVG Flow Lines — replaced by CSS animated dots */
 .hld-flow-lines {
-    position: absolute;
-    top: 50%;
-    left: 0;
-    right: 0;
-    height: 100px;
-    transform: translateY(-50%);
-    z-index: 0;
-    opacity: 0.6;
-    pointer-events: none;
-}
-
-.flow-path {
-    stroke-dasharray: 8 4;
-    animation: flowDash 2s linear infinite;
-}
-
-@keyframes flowDash {
-    from {
-        stroke-dashoffset: 24;
-    }
-
-    to {
-        stroke-dashoffset: 0;
-    }
-}
-
-.flow-particle {
-    opacity: 0.8;
+    display: none;
 }
 
 /* Pipeline Steps Row */
@@ -1325,11 +1304,11 @@ body {
     cursor: pointer;
     transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
     position: relative;
+    z-index: 5;
     backdrop-filter: blur(10px);
 }
 
 .hld-step:hover {
-    transform: translateY(-8px) scale(1.05);
     border-color: var(--accent-primary);
     background: rgba(99, 102, 241, 0.1);
     box-shadow:
@@ -1373,7 +1352,7 @@ body {
     color: white;
 }
 
-.hld-step:hover .hld-step-icon {
+.hld-step.active .hld-step-icon {
     transform: scale(1.1);
 }
 
@@ -1515,11 +1494,26 @@ body {
     border-top: 1px solid rgba(99, 102, 241, 0.4);
 }
 
+/* Hover no longer shows tooltip — use click-to-toggle (.active) */
 .hld-step:hover .hld-step-tooltip,
 .hld-step:focus .hld-step-tooltip {
+    /* Disabled — tooltip controlled via .active class only */
+}
+
+/* Click-to-toggle: show tooltip when step has .active class */
+.hld-step.active .hld-step-tooltip {
     opacity: 1;
     visibility: visible;
     transform: translateX(-50%) translateY(0);
+}
+
+/* Active step highlight (desktop) */
+.hld-step.active {
+    border-color: var(--accent-primary);
+    background: rgba(99, 102, 241, 0.1);
+    box-shadow:
+        0 20px 40px rgba(0, 0, 0, 0.3),
+        0 0 30px rgba(99, 102, 241, 0.2);
 }
 
 /* Edge-aware tooltip positioning for first step */
@@ -1532,8 +1526,7 @@ body {
     left: 70px;
 }
 
-.hld-step:first-child:hover .hld-step-tooltip,
-.hld-step:first-child:focus .hld-step-tooltip {
+.hld-step:first-child.active .hld-step-tooltip {
     transform: translateX(0) translateY(0);
 }
 
@@ -1549,8 +1542,7 @@ body {
     right: 70px;
 }
 
-.hld-step:last-child:hover .hld-step-tooltip,
-.hld-step:last-child:focus .hld-step-tooltip {
+.hld-step:last-child.active .hld-step-tooltip {
     transform: translateX(0) translateY(0);
 }
 
@@ -1720,57 +1712,249 @@ body {
 }
 
 /* Responsive Design */
+
+/* Tablet / medium screens — vertical pipeline flow */
 @media (max-width: 1200px) {
-    .hld-steps-row {
-        flex-wrap: wrap;
-        justify-content: center;
-    }
-
-    .hld-step {
-        max-width: 140px;
-    }
-
     .hld-flow-lines {
         display: none;
     }
+
+    .hld-modal-content {
+        overflow: hidden;
+    }
+
+    .hld-modal-body {
+        overflow-y: auto;
+        overflow-x: hidden;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .hld-pipeline-container {
+        padding-bottom: var(--spacing-xl);
+        min-height: auto;
+    }
+
+    /* Vertical pipeline layout */
+    .hld-steps-row {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0;
+        position: relative;
+        z-index: 1;
+    }
+
+    .hld-step {
+        max-width: 340px;
+        width: 100%;
+        flex-direction: row;
+        align-items: center;
+        gap: var(--spacing-md);
+        padding: var(--spacing-md) var(--spacing-lg);
+        position: relative;
+    }
+
+    .hld-step-icon {
+        margin-bottom: 0;
+        flex-shrink: 0;
+    }
+
+    .hld-step-label {
+        text-align: left;
+    }
+
+    /* Remove per-step pseudo-elements on mobile */
+    .hld-step::before,
+    .hld-step::after {
+        display: none !important;
+    }
+
+    /* Full-height vertical connection line behind all steps */
+    .hld-steps-row::before {
+        content: '';
+        position: absolute;
+        top: 5%;
+        bottom: 5%;
+        left: 50%;
+        width: 2px;
+        transform: translateX(-50%);
+        background: linear-gradient(180deg,
+                rgba(99, 102, 241, 0.3) 0%,
+                rgba(139, 92, 246, 0.4) 50%,
+                rgba(99, 102, 241, 0.3) 100%);
+        z-index: -1;
+    }
+
+    /* Single animated dot traversing the vertical pipeline top-to-bottom */
+    .hld-steps-row::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 50%;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #818cf8;
+        box-shadow: 0 0 10px rgba(99, 102, 241, 0.8), 0 0 20px rgba(99, 102, 241, 0.4);
+        transform: translateX(-50%) translateY(-50%);
+        z-index: 1;
+        pointer-events: none;
+        animation: verticalPipelineDot 9s ease-in-out infinite;
+    }
+
+    @keyframes verticalPipelineDot {
+        0% {
+            top: 5%;
+            opacity: 0;
+        }
+        5% {
+            opacity: 1;
+        }
+        95% {
+            opacity: 1;
+        }
+        100% {
+            top: 95%;
+            opacity: 0;
+        }
+    }
+
+    /* Spacing for connector gap */
+    .hld-step + .hld-step {
+        margin-top: 24px;
+    }
+
+    /* Tap-to-expand tooltips */
+    .hld-step-tooltip {
+        position: static;
+        transform: none;
+        width: 100%;
+        max-height: 0;
+        overflow: hidden;
+        opacity: 0;
+        padding: 0;
+        margin: 0;
+        border: none;
+        box-shadow: none;
+        background: transparent;
+        transition: max-height 0.35s ease, opacity 0.25s ease, padding 0.35s ease, margin 0.35s ease;
+        backdrop-filter: none;
+        flex-basis: 100%;
+    }
+
+    .hld-step-tooltip::after {
+        display: none;
+    }
+
+    /* Make step a wrapping flex so tooltip goes below */
+    .hld-step {
+        flex-wrap: wrap;
+    }
+
+    /* Override desktop tooltip positioning — make inline */
+    .hld-step.active .hld-step-tooltip {
+        position: static;
+        transform: none;
+        left: auto;
+        max-height: 300px;
+        opacity: 1;
+        visibility: visible;
+        padding: var(--spacing-md);
+        margin-top: var(--spacing-sm);
+        background: rgba(26, 26, 46, 0.95);
+        border: 1px solid rgba(99, 102, 241, 0.3);
+        border-radius: var(--radius-md);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+        width: 100%;
+        flex-basis: 100%;
+    }
+
+    /* Active step highlight */
+    .hld-step.active {
+        border-color: var(--accent-primary);
+        background: rgba(99, 102, 241, 0.1);
+        box-shadow:
+            0 8px 24px rgba(0, 0, 0, 0.3),
+            0 0 20px rgba(99, 102, 241, 0.15);
+    }
+
+    /* Prevent hover shift — especially when hovering over expanded tooltip */
+    .hld-step:hover {
+        transform: none;
+    }
+
+    /* Edge-aware overrides — inline tooltip, no positioning needed */
+    .hld-step:first-child .hld-step-tooltip,
+    .hld-step:last-child .hld-step-tooltip {
+        left: auto;
+        right: auto;
+        transform: none;
+    }
+
+    .hld-step:first-child.active .hld-step-tooltip,
+    .hld-step:last-child.active .hld-step-tooltip {
+        transform: none;
+    }
+
+    .hld-legend {
+        margin-top: var(--spacing-xl);
+    }
 }
 
+/* Small tablets / large phones */
+@media (max-width: 900px) {
+    .hld-modal-overlay {
+        padding: var(--spacing-md);
+    }
+
+    .hld-modal-header {
+        padding: var(--spacing-lg) var(--spacing-xl);
+    }
+
+    .hld-modal-body {
+        padding: var(--spacing-lg);
+    }
+}
+
+/* Mobile */
 @media (max-width: 768px) {
+    .hld-modal-overlay {
+        padding: var(--spacing-sm);
+    }
+
     .hld-modal-content {
-        max-height: 95vh;
+        max-height: 100vh;
+        max-height: 100dvh;
         border-radius: var(--radius-lg);
     }
 
     .hld-modal-header {
         padding: var(--spacing-lg);
+        flex-shrink: 0;
     }
 
     .hld-modal-body {
-        padding: var(--spacing-lg);
+        padding: var(--spacing-md);
+        max-height: none;
+    }
+
+    .hld-pipeline-container {
+        padding: var(--spacing-sm) 0;
+        padding-bottom: var(--spacing-md);
     }
 
     .hld-modal-title h2 {
         font-size: var(--font-size-xl);
     }
 
-    .hld-steps-row {
-        flex-direction: column;
-        gap: var(--spacing-md);
-    }
-
     .hld-step {
         max-width: 100%;
-        width: 100%;
-        flex-direction: row;
-        justify-content: flex-start;
-        gap: var(--spacing-md);
         padding: var(--spacing-md);
     }
 
     .hld-step-icon {
         width: 50px;
         height: 50px;
-        margin-bottom: 0;
     }
 
     .hld-step-icon svg {
@@ -1778,36 +1962,49 @@ body {
         height: 24px;
     }
 
-    .hld-step:hover {
-        transform: translateX(8px) scale(1.02);
-    }
-
-    .hld-step-tooltip {
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        bottom: auto;
-        transform: translate(-50%, -50%) scale(0.95);
-        width: calc(100vw - 32px);
-        max-width: 320px;
-    }
-
-    .hld-step-tooltip::after {
-        display: none;
-    }
-
-    .hld-step:hover .hld-step-tooltip,
-    .hld-step:focus .hld-step-tooltip {
-        transform: translate(-50%, -50%) scale(1);
-    }
-
     .legend-items {
-        gap: var(--spacing-md);
+        gap: var(--spacing-sm);
+    }
+
+    .hld-legend {
+        margin-top: var(--spacing-lg);
+    }
+}
+
+/* Very small phones */
+@media (max-width: 420px) {
+    .hld-modal-overlay {
+        padding: 0;
+    }
+
+    .hld-modal-content {
+        border-radius: 0;
+        max-height: 100vh;
+        max-height: 100dvh;
+    }
+
+    .hld-step {
+        padding: var(--spacing-sm) var(--spacing-md);
+    }
+
+    .hld-step-icon {
+        width: 44px;
+        height: 44px;
+    }
+
+    .hld-step-label {
+        font-size: var(--font-size-xs);
+    }
+
+    .hld-step-badge {
+        font-size: 9px;
+        padding: 3px 8px;
     }
 }
 
 /* Connection Lines Animation for Desktop */
 @media (min-width: 1201px) {
+    /* Connection line between steps */
     .hld-step::before {
         content: '';
         position: absolute;
@@ -1818,7 +2015,7 @@ body {
         background: linear-gradient(90deg,
                 rgba(99, 102, 241, 0.5) 0%,
                 rgba(139, 92, 246, 0.3) 50%,
-                transparent 100%);
+                rgba(99, 102, 241, 0.5) 100%);
         transform: translateY(-50%);
         z-index: -1;
     }
@@ -1831,6 +2028,84 @@ body {
         background: linear-gradient(90deg,
                 rgba(99, 102, 241, 0.8) 0%,
                 rgba(139, 92, 246, 0.5) 50%,
-                transparent 100%);
+                rgba(99, 102, 241, 0.8) 100%);
+    }
+
+    /* Single animated dot traversing the entire pipeline left-to-right */
+    .hld-steps-row {
+        overflow: visible;
+    }
+
+    /* Full-width pipeline connection line behind all steps */
+    .hld-steps-row::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 5%;
+        right: 5%;
+        height: 2px;
+        background: linear-gradient(90deg,
+                rgba(99, 102, 241, 0.3) 0%,
+                rgba(139, 92, 246, 0.4) 50%,
+                rgba(99, 102, 241, 0.3) 100%);
+        transform: translateY(-50%);
+        z-index: -1;
+    }
+
+    .hld-steps-row::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 0;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #818cf8;
+        box-shadow: 0 0 10px rgba(99, 102, 241, 0.8), 0 0 20px rgba(99, 102, 241, 0.4);
+        transform: translateY(-50%) translateX(-50%);
+        z-index: 1;
+        pointer-events: none;
+        animation: pipelineDot 9s ease-in-out infinite;
+    }
+
+    @keyframes pipelineDot {
+        0% {
+            left: 5%;
+            opacity: 0;
+        }
+        5% {
+            opacity: 1;
+        }
+        95% {
+            opacity: 1;
+        }
+        100% {
+            left: 95%;
+            opacity: 0;
+        }
+    }
+
+    /* Hover shows tooltip on desktop */
+    .hld-step:hover .hld-step-tooltip {
+        opacity: 1;
+        visibility: visible;
+        transform: translateX(-50%) translateY(0);
+    }
+
+    .hld-step:first-child:hover .hld-step-tooltip {
+        transform: translateX(0) translateY(0);
+    }
+
+    .hld-step:last-child:hover .hld-step-tooltip {
+        transform: translateX(0) translateY(0);
+    }
+
+    /* Hover step highlight */
+    .hld-step:hover {
+        transform: translateY(-8px) scale(1.05);
+    }
+
+    .hld-step:hover .hld-step-icon {
+        transform: scale(1.1);
     }
 }
