@@ -56,6 +56,14 @@
                     <span>Policy Knowledge Base</span>
                 </a>
             </nav>
+            <a href="#" class="help-link" id="helpLink">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+                    <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+                How it works
+            </a>
             <div class="header-status">
                 <div class="status-indicator">
                     <span class="status-dot"></span>
@@ -64,6 +72,24 @@
             </div>
         </div>
     </header>
+
+    <!-- Onboarding Banner -->
+    <div class="onboarding-banner" id="onboardingBanner">
+        <div class="onboarding-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="18" cy="5" r="3" />
+                <circle cx="6" cy="12" r="3" />
+                <circle cx="18" cy="19" r="3" />
+                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+            </svg>
+        </div>
+        <div class="onboarding-content">
+            <h3 class="onboarding-title">Policy Knowledge Base</h3>
+            <p class="onboarding-text">Transform your PDF policies into a queryable knowledge graph. Upload policy documents, and watch as AI parses, extracts entities, and builds a Neo4j graph. Tap the <strong>i</strong> icons for explanations of each step.</p>
+        </div>
+        <button class="onboarding-dismiss" id="dismissOnboarding">Got it</button>
+    </div>
 
     <!-- Main Container -->
     <main class="main-container">
@@ -81,6 +107,7 @@
                     </svg>
                 </div>
                 <h2 class="panel-title">Visualize Knowledge Base</h2>
+                <button class="info-icon" data-tooltip="visualize" tabindex="0" aria-label="Info about visualize">i</button>
             </div>
 
             <!-- Visualize Card -->
@@ -107,6 +134,7 @@
                     </svg>
                 </div>
                 <h2 class="panel-title">Policy Upload</h2>
+                <button class="info-icon" data-tooltip="upload" tabindex="0" aria-label="Info about upload">i</button>
             </div>
 
             <!-- Upload Card -->
@@ -168,7 +196,7 @@
                             </svg>
                         </div>
                         <div class="step-content">
-                            <div class="step-name">Document Parsing</div>
+                            <div class="step-name">Document Parsing <button class="info-icon" data-tooltip="kb-parsing" tabindex="0" aria-label="Info about parsing">i</button></div>
                             <div class="step-description">Extracting text from PDF documents</div>
                         </div>
                         <span class="step-status">Pending</span>
@@ -181,7 +209,7 @@
                             </svg>
                         </div>
                         <div class="step-content">
-                            <div class="step-name">Ontology Design</div>
+                            <div class="step-name">Ontology Design <button class="info-icon" data-tooltip="ontology" tabindex="0" aria-label="Info about ontology">i</button></div>
                             <div class="step-description">Designing graph schema with Gemini</div>
                         </div>
                         <span class="step-status">Pending</span>
@@ -194,7 +222,7 @@
                             </svg>
                         </div>
                         <div class="step-content">
-                            <div class="step-name">Entity Extraction</div>
+                            <div class="step-name">Entity Extraction <button class="info-icon" data-tooltip="kb-extraction" tabindex="0" aria-label="Info about extraction">i</button></div>
                             <div class="step-description">Extracting entities & relationships</div>
                         </div>
                         <span class="step-status">Pending</span>
@@ -207,7 +235,7 @@
                             </svg>
                         </div>
                         <div class="step-content">
-                            <div class="step-name">Critic Validation</div>
+                            <div class="step-name">Critic Validation <button class="info-icon" data-tooltip="validation" tabindex="0" aria-label="Info about validation">i</button></div>
                             <div class="step-description">Validating extraction quality</div>
                         </div>
                         <span class="step-status">Pending</span>
@@ -221,7 +249,7 @@
                             </svg>
                         </div>
                         <div class="step-content">
-                            <div class="step-name">Graph Building</div>
+                            <div class="step-name">Graph Building <button class="info-icon" data-tooltip="building" tabindex="0" aria-label="Info about graph building">i</button></div>
                             <div class="step-description">Constructing Neo4j knowledge graph</div>
                         </div>
                         <span class="step-status">Pending</span>
@@ -252,7 +280,7 @@
                 </div>
                 <h2 class="panel-title">Knowledge Graph</h2>
                 <div class="graph-stats" id="graph-stats">
-                    Nodes: <span id="node-count">0</span> | Edges: <span id="edge-count">0</span>
+                    Nodes: <span id="node-count">0</span> <button class="info-icon" data-tooltip="node-count" tabindex="0" aria-label="Info about nodes" style="margin-right: 8px;">i</button>| Edges: <span id="edge-count">0</span> <button class="info-icon" data-tooltip="edge-count" tabindex="0" aria-label="Info about edges">i</button>
                 </div>
             </div>
 
@@ -628,6 +656,178 @@
         // Initialize - hide empty state initially
         document.addEventListener('DOMContentLoaded', () => {
             emptyState.style.display = 'flex';
+        });
+
+        // ============================================
+        // Tooltip System - Tap to Reveal
+        // ============================================
+        const TooltipManager = {
+            overlay: null,
+            bubble: null,
+            activeIcon: null,
+
+            tooltips: {
+                'visualize': {
+                    title: 'Visualize Knowledge Base',
+                    text: 'Load and display the current knowledge graph without recompiling. Shows the existing graph from Neo4j.'
+                },
+                'upload': {
+                    title: 'Policy Upload',
+                    text: 'Upload PDF policy documents to be processed and compiled into a queryable knowledge graph.'
+                },
+                'kb-parsing': {
+                    title: 'Document Parsing',
+                    text: 'Converts uploaded PDF policy documents into machine-readable text using LlamaParse for accurate extraction.'
+                },
+                'ontology': {
+                    title: 'Ontology Design',
+                    text: 'AI designs the knowledge graph schema, defining entity types (e.g., Policy, Condition, Action) and their relationships.'
+                },
+                'kb-extraction': {
+                    title: 'Entity Extraction',
+                    text: 'Extracts specific policy rules, conditions, thresholds, and relationships from the parsed text using LLM.'
+                },
+                'validation': {
+                    title: 'Critic Validation',
+                    text: 'Quality check phase where AI reviews extracted entities for accuracy, completeness, and consistency before building the graph.'
+                },
+                'building': {
+                    title: 'Graph Building',
+                    text: 'Constructs the Neo4j knowledge graph by creating nodes and edges from validated entities and relationships.'
+                },
+                'node-count': {
+                    title: 'Node Count',
+                    text: 'Total number of entities in the graph (policies, rules, conditions, categories, exceptions, etc.).'
+                },
+                'edge-count': {
+                    title: 'Edge Count',
+                    text: 'Total number of relationships connecting entities, defining how policies relate to conditions and actions.'
+                }
+            },
+
+            init() {
+                this.overlay = document.createElement('div');
+                this.overlay.className = 'tooltip-overlay hidden';
+                document.body.appendChild(this.overlay);
+
+                this.bubble = document.createElement('div');
+                this.bubble.className = 'tooltip-bubble';
+                document.body.appendChild(this.bubble);
+
+                this.overlay.addEventListener('click', () => this.hide());
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Escape') this.hide();
+                });
+
+                document.querySelectorAll('.info-icon').forEach(icon => {
+                    icon.addEventListener('click', (e) => this.toggle(e, icon));
+                    icon.addEventListener('keydown', (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            this.toggle(e, icon);
+                        }
+                    });
+                });
+            },
+
+            toggle(event, icon) {
+                event.stopPropagation();
+                if (this.activeIcon === icon) {
+                    this.hide();
+                } else {
+                    this.show(icon);
+                }
+            },
+
+            show(icon) {
+                const tooltipId = icon.getAttribute('data-tooltip');
+                const content = this.tooltips[tooltipId];
+                if (!content) return;
+
+                if (this.activeIcon) {
+                    this.activeIcon.classList.remove('active');
+                }
+
+                this.bubble.innerHTML = `
+                    <div class="tooltip-title">${content.title}</div>
+                    <div class="tooltip-text">${content.text}</div>
+                `;
+
+                const rect = icon.getBoundingClientRect();
+                const bubbleWidth = 320;
+                const bubbleHeight = this.bubble.offsetHeight || 100;
+                const padding = 12;
+
+                let left = rect.left;
+                let top = rect.bottom + padding;
+
+                if (left + bubbleWidth > window.innerWidth - padding) {
+                    left = window.innerWidth - bubbleWidth - padding;
+                    this.bubble.classList.add('arrow-right');
+                } else {
+                    this.bubble.classList.remove('arrow-right');
+                }
+
+                if (top + bubbleHeight > window.innerHeight - padding) {
+                    top = rect.top - bubbleHeight - padding;
+                    this.bubble.classList.add('arrow-bottom');
+                } else {
+                    this.bubble.classList.remove('arrow-bottom');
+                }
+
+                this.bubble.style.left = `${Math.max(padding, left)}px`;
+                this.bubble.style.top = `${Math.max(padding, top)}px`;
+
+                this.overlay.classList.remove('hidden');
+                this.bubble.classList.add('visible');
+                icon.classList.add('active');
+                this.activeIcon = icon;
+            },
+
+            hide() {
+                this.overlay.classList.add('hidden');
+                this.bubble.classList.remove('visible');
+                if (this.activeIcon) {
+                    this.activeIcon.classList.remove('active');
+                    this.activeIcon = null;
+                }
+            }
+        };
+
+        // ============================================
+        // Onboarding Banner
+        // ============================================
+        function initOnboarding() {
+            const banner = document.getElementById('onboardingBanner');
+            const dismissBtn = document.getElementById('dismissOnboarding');
+            const helpLink = document.getElementById('helpLink');
+
+            if (!banner) return;
+
+            const dismissed = localStorage.getItem('varaPolicyOnboardingDismissed');
+            if (dismissed) {
+                banner.classList.add('hidden');
+            }
+
+            if (dismissBtn) {
+                dismissBtn.addEventListener('click', () => {
+                    banner.classList.add('hidden');
+                    localStorage.setItem('varaPolicyOnboardingDismissed', 'true');
+                });
+            }
+
+            if (helpLink) {
+                helpLink.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    banner.classList.remove('hidden');
+                    banner.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                });
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            TooltipManager.init();
+            initOnboarding();
         });
     </script>
 </body>

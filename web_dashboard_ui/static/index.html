@@ -44,7 +44,7 @@
                     </svg>
                     <span>Email Pipeline</span>
                 </a>
-                <a href="https://policy-compiler-171083103370.northamerica-northeast1.run.app" class="nav-link">
+                <a href="/policy-knowledge-base" class="nav-link">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="18" cy="5" r="3" />
                         <circle cx="6" cy="12" r="3" />
@@ -55,6 +55,14 @@
                     <span>Policy Knowledge Base</span>
                 </a>
             </nav>
+            <a href="#" class="help-link" id="helpLink">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+                    <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+                How it works
+            </a>
             <div class="header-status">
                 <div class="status-indicator">
                     <span class="status-dot"></span>
@@ -63,6 +71,20 @@
             </div>
         </div>
     </header>
+
+    <!-- Onboarding Banner -->
+    <div class="onboarding-banner" id="onboardingBanner">
+        <div class="onboarding-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+            </svg>
+        </div>
+        <div class="onboarding-content">
+            <h3 class="onboarding-title">Welcome to VARA.ai</h3>
+            <p class="onboarding-text">VARA AI is a multi-agent customer support platform built with Gemini 3, Neo4j, and MCP that delivers verified refund decisions with grounded, explainable reasoning from a policy knowledge graph. Select a demo scenario, hit Process, and watch the pipeline in action. Tap the <strong>i</strong> icons for explanations of each step.</p>
+        </div>
+        <button class="onboarding-dismiss" id="dismissOnboarding">Got it</button>
+    </div>
 
     <!-- Main Container -->
     <main class="main-container">
@@ -88,6 +110,7 @@
                         </svg>
                     </span>
                     <h3>Select Demo Scenario</h3>
+                    <button class="info-icon" data-tooltip="scenario" tabindex="0" aria-label="Info about demo scenarios">i</button>
                 </div>
                 <div class="scenario-select-wrapper">
                     <select id="scenarioSelect" class="select-input">
@@ -216,6 +239,7 @@
                     <div class="step-content">
                         <div class="step-header">
                             <h4>Email Classification</h4>
+                            <button class="info-icon" data-tooltip="classification" tabindex="0" aria-label="Info about email classification">i</button>
                             <span class="step-status pending">Pending</span>
                         </div>
                         <p class="step-description">Classify email intent using NLP model</p>
@@ -225,7 +249,7 @@
                                 <span class="result-value category-return" id="resultCategory">RETURN</span>
                             </div>
                             <div class="result-card">
-                                <span class="result-label">Confidence</span>
+                                <span class="result-label">Confidence <button class="info-icon" data-tooltip="confidence" tabindex="0" aria-label="Info about confidence score" style="margin-left: 4px;">i</button></span>
                                 <div class="confidence-bar">
                                     <div class="confidence-fill" id="resultConfidenceFill" style="width: 99%"></div>
                                     <span class="confidence-value" id="resultConfidenceValue">99%</span>
@@ -249,6 +273,7 @@
                     <div class="step-content">
                         <div class="step-header">
                             <h4>Document Parsing</h4>
+                            <button class="info-icon" data-tooltip="parsing" tabindex="0" aria-label="Info about document parsing">i</button>
                             <span class="step-status pending">Pending</span>
                         </div>
                         <p class="step-description">Extract text from PDF invoices using LlamaParse</p>
@@ -273,6 +298,7 @@
                     <div class="step-content">
                         <div class="step-header">
                             <h4>Defect Analysis</h4>
+                            <button class="info-icon" data-tooltip="defect" tabindex="0" aria-label="Info about defect analysis">i</button>
                             <span class="step-status pending">Pending</span>
                         </div>
                         <p class="step-description">Analyze product images using Gemini Vision</p>
@@ -297,6 +323,7 @@
                     <div class="step-content">
                         <div class="step-header">
                             <h4>LLM Data Extraction</h4>
+                            <button class="info-icon" data-tooltip="extraction" tabindex="0" aria-label="Info about LLM extraction">i</button>
                             <span class="step-status pending">Pending</span>
                         </div>
                         <p class="step-description">Extract structured order details using Gemini 3</p>
@@ -326,6 +353,7 @@
                     <div class="step-content">
                         <div class="step-header">
                             <h4>Database Verification</h4>
+                            <button class="info-icon" data-tooltip="verification" tabindex="0" aria-label="Info about database verification">i</button>
                             <span class="step-status pending">Pending</span>
                         </div>
                         <p class="step-description">Verify order details against orders database</p>
@@ -377,6 +405,7 @@
                     <div class="step-content">
                         <div class="step-header">
                             <h4>Policy Adjudication</h4>
+                            <button class="info-icon" data-tooltip="adjudication" tabindex="0" aria-label="Info about policy adjudication">i</button>
                             <span class="step-status pending">Pending</span>
                         </div>
                         <p class="step-description">Evaluate request against company return policy</p>
@@ -435,6 +464,7 @@
                     <div class="step-content">
                         <div class="step-header">
                             <h4>Final Decision</h4>
+                            <button class="info-icon" data-tooltip="decision" tabindex="0" aria-label="Info about final decision">i</button>
                             <span class="step-status pending">Pending</span>
                         </div>
                         <p class="step-description">Generate automated response and action</p>

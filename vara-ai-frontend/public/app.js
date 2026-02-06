@@ -964,3 +964,228 @@ async function init() {
 
 // Start the application when DOM is ready
 document.addEventListener('DOMContentLoaded', init);
+
+// ============================================
+// Tooltip System - Tap to Reveal
+// ============================================
+const TooltipManager = {
+    overlay: null,
+    bubble: null,
+    activeIcon: null,
+
+    // Tooltip content for each component
+    tooltips: {
+        // Email Pipeline Steps
+        'classification': {
+            title: 'Email Classification',
+            text: 'AI analyzes the email to determine intent (RETURN, REFUND, or REPLACEMENT) and extracts key details using natural language processing.'
+        },
+        'parsing': {
+            title: 'Document Parsing',
+            text: 'LlamaParse extracts text from attached PDF invoices to verify purchase details like order ID, date, and items.'
+        },
+        'defect': {
+            title: 'Defect Analysis',
+            text: 'Gemini Vision AI examines any product images to detect and describe visible defects or damage.'
+        },
+        'extraction': {
+            title: 'LLM Data Extraction',
+            text: 'Gemini extracts structured data (customer name, invoice ID, product details) from the email and attachments.'
+        },
+        'verification': {
+            title: 'Database Verification',
+            text: 'MCP agent queries your database using SQL tools to verify the order exists and matches customer claims.'
+        },
+        'adjudication': {
+            title: 'Policy Adjudication',
+            text: 'Traverses the policy knowledge graph to find applicable rules and determine if the request meets policy criteria.'
+        },
+        'decision': {
+            title: 'Final Decision',
+            text: 'Combines all previous analysis to generate an APPROVED, DENIED, or NEEDS REVIEW decision with detailed reasoning.'
+        },
+        // Sub-elements
+        'confidence': {
+            title: 'Confidence Score',
+            text: 'Indicates how certain the AI is about its classification (0-100%). Higher scores mean stronger confidence in the detected intent.'
+        },
+        'extracted-btn': {
+            title: 'Extracted Data',
+            text: 'Shows the raw JSON data extracted by the LLM, including customer info, order details, and request specifics.'
+        },
+        'verified-btn': {
+            title: 'Verified Order',
+            text: 'Displays the order record retrieved from database lookup, confirming the customer\'s purchase history.'
+        },
+        'scenario': {
+            title: 'Demo Scenarios',
+            text: 'Choose from pre-loaded demo scenarios featuring sample customer emails with various request types (return, refund, replacement).'
+        },
+        // Adjudication sub-steps
+        'substep-context': {
+            title: 'Build Context',
+            text: 'Gathers all relevant information about the request to prepare for policy evaluation.'
+        },
+        'substep-classify': {
+            title: 'Classify Category',
+            text: 'Determines which policy category applies to this specific request type.'
+        },
+        'substep-graph': {
+            title: 'Graph Traversal',
+            text: 'Navigates the policy knowledge graph to find relevant rules, conditions, and thresholds.'
+        },
+        'substep-sources': {
+            title: 'Fetch Citations',
+            text: 'Retrieves the source policy documents that support the decision for transparency.'
+        },
+        'substep-decision': {
+            title: 'LLM Decision',
+            text: 'AI makes the final adjudication decision based on gathered context and policy rules.'
+        },
+        'substep-explain': {
+            title: 'Generate Explanation',
+            text: 'Creates a clear, customer-friendly explanation of the decision and next steps.'
+        }
+    },
+
+    init() {
+        // Create overlay element
+        this.overlay = document.createElement('div');
+        this.overlay.className = 'tooltip-overlay hidden';
+        document.body.appendChild(this.overlay);
+
+        // Create bubble element
+        this.bubble = document.createElement('div');
+        this.bubble.className = 'tooltip-bubble';
+        document.body.appendChild(this.bubble);
+
+        // Event listeners
+        this.overlay.addEventListener('click', () => this.hide());
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') this.hide();
+        });
+
+        // Attach click handlers to all info icons
+        document.querySelectorAll('.info-icon').forEach(icon => {
+            icon.addEventListener('click', (e) => this.toggle(e, icon));
+            icon.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    this.toggle(e, icon);
+                }
+            });
+        });
+    },
+
+    toggle(event, icon) {
+        event.stopPropagation();
+        
+        if (this.activeIcon === icon) {
+            this.hide();
+        } else {
+            this.show(icon);
+        }
+    },
+
+    show(icon) {
+        const tooltipId = icon.getAttribute('data-tooltip');
+        const content = this.tooltips[tooltipId];
+        
+        if (!content) return;
+
+        // Hide any existing tooltip first
+        if (this.activeIcon) {
+            this.activeIcon.classList.remove('active');
+        }
+
+        // Update content
+        this.bubble.innerHTML = `
+            <div class="tooltip-title">${content.title}</div>
+            <div class="tooltip-text">${content.text}</div>
+        `;
+
+        // Position the bubble
+        const rect = icon.getBoundingClientRect();
+        const bubbleWidth = 320;
+        const bubbleHeight = this.bubble.offsetHeight || 100;
+        const padding = 12;
+
+        let left = rect.left;
+        let top = rect.bottom + padding;
+
+        // Adjust horizontal position if off-screen
+        if (left + bubbleWidth > window.innerWidth - padding) {
+            left = window.innerWidth - bubbleWidth - padding;
+            this.bubble.classList.add('arrow-right');
+        } else {
+            this.bubble.classList.remove('arrow-right');
+        }
+
+        // If tooltip would go below viewport, show above instead
+        if (top + bubbleHeight > window.innerHeight - padding) {
+            top = rect.top - bubbleHeight - padding;
+            this.bubble.classList.add('arrow-bottom');
+        } else {
+            this.bubble.classList.remove('arrow-bottom');
+        }
+
+        this.bubble.style.left = `${Math.max(padding, left)}px`;
+        this.bubble.style.top = `${Math.max(padding, top)}px`;
+
+        // Show elements
+        this.overlay.classList.remove('hidden');
+        this.bubble.classList.add('visible');
+        icon.classList.add('active');
+        this.activeIcon = icon;
+    },
+
+    hide() {
+        this.overlay.classList.add('hidden');
+        this.bubble.classList.remove('visible');
+        if (this.activeIcon) {
+            this.activeIcon.classList.remove('active');
+            this.activeIcon = null;
+        }
+    }
+};
+
+// Initialize tooltip system after DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+    TooltipManager.init();
+});
+
+// ============================================
+// Onboarding Banner
+// ============================================
+function initOnboarding() {
+    const banner = document.getElementById('onboardingBanner');
+    const dismissBtn = document.getElementById('dismissOnboarding');
+    const helpLink = document.getElementById('helpLink');
+
+    if (!banner) return;
+
+    // Check if user has dismissed before
+    const dismissed = localStorage.getItem('varaOnboardingDismissed');
+    if (dismissed) {
+        banner.classList.add('hidden');
+    }
+
+    // Dismiss button handler
+    if (dismissBtn) {
+        dismissBtn.addEventListener('click', () => {
+            banner.classList.add('hidden');
+            localStorage.setItem('varaOnboardingDismissed', 'true');
+        });
+    }
+
+    // Help link to show banner again
+    if (helpLink) {
+        helpLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            banner.classList.remove('hidden');
+            banner.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+    }
+}
+
+document.addEventListener('DOMContentLoaded', initOnboarding);
