@@ -17,7 +17,6 @@
 | | |
 |---|---|
 | **Demo URL** | [https://storage.googleapis.com/mcp_frontend/index.html](https://storage.googleapis.com/mcp_frontend/index.html) |
-| **Policy Compiler** | [https://policy-compiler-171083103370.northamerica-northeast1.run.app](https://policy-compiler-171083103370.northamerica-northeast1.run.app) |
 | **Demo Video** | [YouTube Demo](#) <!-- Add your YouTube link here --> |
 
 > **No login required.** The demo is publicly accessible.
@@ -49,57 +48,67 @@ VARA.ai is an end-to-end AI system that:
 
 ---
 
-## 🧠 Gemini 3 Integration
+## 🧪 Testing Instructions
 
-| Feature | Model | Purpose |
-|---------|-------|---------|
-| **Extended Thinking** | `gemini-3-pro-preview` | Multi-step policy adjudication with `thinking_level="high"` |
-| **Structured Output** | `gemini-2.5-flash` | JSON schema extraction for order details |
-| **Image Understanding** | `gemini-2.0-flash` | Invoice/receipt parsing via Gemini Vision |
-| **Classification** | `gemini-3-flash-preview` | Email intent classification (REFUND/RETURN/REPLACEMENT) |
-| **Ontology Design** | `gemini-2.5-flash` | Policy knowledge graph schema generation |
+### Demo URL
+**[https://storage.googleapis.com/mcp_frontend/index.html](https://storage.googleapis.com/mcp_frontend/index.html)**
 
-### Key Gemini 3 Features Used
+**No login required.** The demo is publicly accessible.
+
+---
+
+### Feature 1: Email Processing Pipeline
+
+1. **Open the demo URL** — You'll land on the Email Pipeline page
+
+2. **Select a scenario** from the "Select Demo Scenario" dropdown
+
+3. **View the request** — Email content and attached invoice displayed on the left panel
+
+4. **Click "Process Email Request"** to trigger the full AI pipeline
+
+5. **Watch the pipeline** execute in real-time (~1 minute to complete):
+   - Email Classification
+   - Order Extraction (Gemini Vision)
+   - Database Verification
+   - Policy Adjudication (Extended Thinking)
+   - Decision with Explanation
+
+> **Note:** In production, this pipeline runs automatically when a customer sends an email to `vara.assist@gmail.com`. The demo uses pre-defined scenarios because processing a real email requires the corresponding order to exist in our database. This website serves as a prototype to demonstrate the fully automated end-to-end pipeline.
+
+---
+
+### Feature 2: Policy Knowledge Base
+
+1. **Click "Policy Knowledge Base"** in the navigation bar
+
+#### Option A: View Existing Graph
+- Click **"Visualize Graph"** to view the pre-compiled knowledge graph (Best Buy return policy)
+- **Interactive controls:**
+  - Scroll to zoom
+  - Drag to pan
+  - Click nodes for details
+
+#### Option B: Compile New Policy (20-25 min)
+1. Upload any company's terms and conditions PDF
+2. Full compilation takes ~20-25 minutes (based on document length), orchestrated entirely by Gemini 3 Pro
+
+**The multi-agent system will automatically:**
 ```
-ThinkingConfig(thinking_level="high")  →  Extended reasoning for complex decisions
-response_schema                        →  Guaranteed structured JSON outputs
-response_mime_type="application/json"  →  Reliable parsing
-system_instruction                     →  Agent persona and behavior control
-Gemini Vision                          →  Multi-modal invoice/attachment processing
+📄 Parse PDF → Markdown (LlamaParse)
+        ↓
+🧠 Design graph schema (Ontology Agent)
+        ↓
+📤 Extract entities & relationships (Extraction Agent)
+        ↓
+🔍 Validate quality (Critic Agent)
+        ↓
+🔨 Build Neo4j graph (Builder Agent)
 ```
 
 ---
 
-## 🤖 Multi-Agent Architecture
-
-```mermaid
-flowchart TB
-    subgraph PolicyCompiler["📚 Policy Compiler Pipeline"]
-        direction LR
-        PDF["📄 Policy PDFs"] --> Parse["LlamaParse"]
-        Parse --> Ontology["🧠 Ontology Agent<br/><i>Designs graph schema</i>"]
-        Ontology --> Extract["📤 Extraction Agent<br/><i>Extracts entities & rules</i>"]
-        Extract --> Critic["🔍 Critic Agent<br/><i>Validates quality</i>"]
-        Critic --> Builder["🔨 Builder Agent<br/><i>Constructs Neo4j graph</i>"]
-        Builder --> Graph[("🔷 Neo4j<br/>Knowledge Graph")]
-    end
-    
-    subgraph Processing["⚙️ Request Processing"]
-        Email["📧 Customer Email"] --> Classify["Classify Intent"]
-        Classify --> ExtractOrder["Extract Order Details"]
-        ExtractOrder --> Verify["Verify in Database"]
-        Verify --> Adjudicator["⚖️ Adjudicator Agent<br/><i>Extended Thinking</i><br/><i>thinking_level=high</i>"]
-        Graph -.->|"Query policies"| Adjudicator
-        Adjudicator --> Decision["✅ Grounded Decision<br/>with Explanation"]
-    end
-    
-    style Ontology fill:#E3F2FD
-    style Extract fill:#E8F5E9
-    style Critic fill:#FFF3E0
-    style Builder fill:#FCE4EC
-    style Adjudicator fill:#F3E5F5
-    style Graph fill:#E1F5FE
-```
+## 🤖 Multi-Agent System
 
 ### 5 Specialized Agents
 
@@ -113,7 +122,7 @@ flowchart TB
 
 ---
 
-## 🔧 MCP (Model Context Protocol) Integration
+## 🔧 MCP (Model Context Protocol) Servers
 
 VARA.ai uses **FastMCP** to create modular, tool-based AI capabilities:
 
@@ -129,9 +138,25 @@ VARA.ai uses **FastMCP** to create modular, tool-based AI capabilities:
 | `select_order_id` | LLM-assisted order matching |
 | `llm_find_orders` | Generate SQL from natural language |
 
-### `neo4j_graph_engine` — Policy Knowledge Graph
+### `doc_server` — Invoice Processing
 | Tool | Description |
 |------|-------------|
+| `process_invoice` | Decode base64 PDF, parse text, and save to file |
+
+### `defect_analyzer` — Product Defect Analysis
+| Tool | Description |
+|------|-------------|
+| `analyze_defect_image` | Analyze product defect images using Gemini Vision |
+
+---
+
+## 🔷 Core Services
+
+### Neo4j Graph Engine
+Policy knowledge graph operations for storing and querying return policies.
+
+| Function | Description |
+|----------|-------------|
 | `check_neo4j_connection` | Test database connectivity |
 | `get_graph_schema` | Retrieve node labels and relationships |
 | `get_graph_statistics` | Node/relationship counts |
@@ -145,9 +170,11 @@ VARA.ai uses **FastMCP** to create modular, tool-based AI capabilities:
 | `validate_graph_integrity` | Check for missing citations, orphans |
 | `sample_graph_data` | Get sample nodes for verification |
 
-### `policy_engine` — PDF Document Parsing
-| Tool | Description |
-|------|-------------|
+### Policy Engine
+PDF document parsing using LlamaParse for policy ingestion.
+
+| Function | Description |
+|----------|-------------|
 | `parse_all_policy_documents` | Parse all PDFs in directory to combined Markdown |
 | `parse_single_policy_document` | Parse a single PDF document |
 
@@ -246,11 +273,17 @@ mcp_customer_support/
 │   ├── db.py                        # Cloud SQL connector
 │   └── llm_sql_runner.py            # Natural language SQL
 │
-├── neo4j_graph_engine/              # 🔷 MCP Server - Graph Database
-│   ├── mcp_server.py                # MCP tools for Neo4j operations
+├── doc_server/                      # 📄 MCP Server - Document Processing
+│   └── mcp_doc_server.py            # Invoice PDF parsing
+│
+├── defect_analyzer/                 # 🔍 MCP Server - Defect Analysis
+│   └── mcp_server.py                # Gemini Vision defect analysis
+│
+├── neo4j_graph_engine/              # 🔷 Neo4j Graph Operations
+│   ├── mcp_server.py                # Graph query functions
 │   └── db.py                        # Neo4j async driver
 │
-├── policy_engine/                   # 📄 MCP Server - PDF Parser
+├── policy_engine/                   # 📚 Policy Document Parser
 │   └── mcp_server.py                # LlamaParse integration
 │
 ├── knowledge_base_server/           # 🌐 Policy Compiler Web Service
@@ -348,66 +381,6 @@ python mcp_client.py
 # Run the policy compiler web service
 cd knowledge_base_server
 python main.py
-```
-
----
-
-## 🧪 Testing Instructions
-
-### Demo URL
-**[https://storage.googleapis.com/mcp_frontend/index.html](https://storage.googleapis.com/mcp_frontend/index.html)**
-
-**No login required.** The demo is publicly accessible.
-
----
-
-### Feature 1: Email Processing Pipeline
-
-1. **Open the demo URL** — You'll land on the Email Pipeline page
-
-2. **Select a scenario** from the "Select Demo Scenario" dropdown
-
-3. **View the request** — Email content and attached invoice displayed on the left panel
-
-4. **Click "Process Email Request"** to trigger the full AI pipeline
-
-5. **Watch the pipeline** execute in real-time (~1 minute to complete):
-   - Email Classification
-   - Order Extraction (Gemini Vision)
-   - Database Verification
-   - Policy Adjudication (Extended Thinking)
-   - Decision with Explanation
-
-> **Note:** In production, this pipeline runs automatically when a customer sends an email to `vara.assist@gmail.com`. The demo uses pre-defined scenarios because processing a real email requires the corresponding order to exist in our database. This website serves as a prototype to demonstrate the fully automated end-to-end pipeline.
-
----
-
-### Feature 2: Policy Knowledge Base
-
-1. **Click "Policy Knowledge Base"** in the navigation bar
-
-#### Option A: View Existing Graph
-- Click **"Visualize Graph"** to view the pre-compiled knowledge graph (Best Buy return policy)
-- **Interactive controls:**
-  - Scroll to zoom
-  - Drag to pan
-  - Click nodes for details
-
-#### Option B: Compile New Policy (20-25 min)
-1. Upload any company's terms and conditions PDF
-2. Full compilation takes ~20-25 minutes (based on document length), orchestrated entirely by Gemini 3 Pro
-
-**The multi-agent system will automatically:**
-```
-📄 Parse PDF → Markdown (LlamaParse)
-        ↓
-🧠 Design graph schema (Ontology Agent)
-        ↓
-📤 Extract entities & relationships (Extraction Agent)
-        ↓
-🔍 Validate quality (Critic Agent)
-        ↓
-🔨 Build Neo4j graph (Builder Agent)
 ```
 
 ---
