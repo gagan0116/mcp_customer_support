@@ -1,15 +1,18 @@
 # neo4j_graph_engine/db.py
 """
 Neo4j connection management for the Policy Knowledge Graph.
-Provides async connection handling with context managers.
+Provides async connection handling with context managers and retry logic.
 """
 
+import asyncio
 import os
 from contextlib import asynccontextmanager
-from typing import Any, Dict, List, Optional
+from functools import wraps
+from typing import Any, Dict, List, Optional, Callable
 
 from dotenv import load_dotenv
 from neo4j import AsyncGraphDatabase, AsyncDriver, AsyncSession
+from neo4j.exceptions import ServiceUnavailable, SessionExpired, TransientError
 
 load_dotenv()
 
@@ -17,6 +20,11 @@ load_dotenv()
 NEO4J_URI = os.getenv("NEO4J_URI")
 NEO4J_USER = os.getenv("NEO4J_USER")
 NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
+
+# Retry configuration
+MAX_RETRIES = 3
+INITIAL_RETRY_DELAY = 1.0  # seconds
+MAX_RETRY_DELAY = 10.0  # seconds
 
 # Global driver instance (singleton pattern)
 _driver: Optional[AsyncDriver] = None
@@ -34,8 +42,22 @@ def get_driver() -> AsyncDriver:
         _driver = AsyncGraphDatabase.driver(
             NEO4J_URI,
             auth=(NEO4J_USER, NEO4J_PASSWORD),
+            max_connection_lifetime=300,  # 5 minutes
+            max_connection_pool_size=10,
+            connection_acquisition_timeout=30,
         )
     return _driver
+
+
+async def reset_driver():
+    """Reset the driver connection (used after connection failures)."""
+    global _driver
+    if _driver is not None:
+        try:
+            await _driver.close()
+        except Exception:
+            pass  # Ignore errors when closing a failed connection
+        _driver = None
 
 
 async def close_driver():
@@ -44,6 +66,42 @@ async def close_driver():
     if _driver is not None:
         await _driver.close()
         _driver = None
+
+
+def with_retry(func: Callable) -> Callable:
+    """
+    Decorator that adds retry logic with exponential backoff.
+    Handles Neo4j Aura free tier auto-pause and transient connection issues.
+    """
+    @wraps(func)
+    async def wrapper(*args, **kwargs):
+        last_exception = None
+        delay = INITIAL_RETRY_DELAY
+        
+        for attempt in range(MAX_RETRIES + 1):
+            try:
+                return await func(*args, **kwargs)
+            except (ServiceUnavailable, SessionExpired, TransientError, OSError, ConnectionError) as e:
+                last_exception = e
+                if attempt < MAX_RETRIES:
+                    print(f"[NEO4J] Connection failed (attempt {attempt + 1}/{MAX_RETRIES + 1}): {e}")
+                    print(f"[NEO4J] Retrying in {delay:.1f}s... (This may happen if Neo4j Aura is waking up)")
+                    
+                    # Reset driver to force fresh connection
+                    await reset_driver()
+                    
+                    await asyncio.sleep(delay)
+                    delay = min(delay * 2, MAX_RETRY_DELAY)  # Exponential backoff
+                else:
+                    print(f"[NEO4J] All {MAX_RETRIES + 1} connection attempts failed.")
+                    raise
+            except Exception as e:
+                # For other exceptions, don't retry
+                raise
+        
+        raise last_exception
+    
+    return wrapper
 
 
 @asynccontextmanager
@@ -63,12 +121,14 @@ async def get_session() -> AsyncSession:
         await session.close()
 
 
+@with_retry
 async def execute_query(
     query: str,
     parameters: Optional[Dict[str, Any]] = None
 ) -> List[Dict[str, Any]]:
     """
     Execute a Cypher query and return results as a list of dicts.
+    Includes automatic retry on connection failures.
     
     Args:
         query: Cypher query string
@@ -83,12 +143,14 @@ async def execute_query(
         return records
 
 
+@with_retry
 async def execute_write(
     query: str,
     parameters: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
     Execute a write transaction (CREATE, MERGE, DELETE, etc).
+    Includes automatic retry on connection failures.
     
     Args:
         query: Cypher write query
@@ -110,9 +172,11 @@ async def execute_write(
         }
 
 
+@with_retry
 async def test_connection() -> Dict[str, Any]:
     """
     Test the Neo4j connection and return database info.
+    Includes automatic retry on connection failures.
     
     Returns:
         Dict with connection status and database info
@@ -148,3 +212,4 @@ if __name__ == "__main__":
         await close_driver()
     
     asyncio.run(main())
+
