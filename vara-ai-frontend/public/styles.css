@@ -83,6 +83,19 @@ html {
     scroll-behavior: smooth;
 }
 
+/* Prevent SVG icons from rendering oversized before full CSS load */
+svg {
+    width: 1em;
+    height: 1em;
+    flex-shrink: 0;
+}
+
+svg[width],
+svg[height] {
+    width: attr(width);
+    height: attr(height);
+}
+
 body {
     font-family: var(--font-family);
     background: var(--bg-primary);
@@ -1994,4 +2007,823 @@ body {
 .help-link svg {
     width: 16px;
     height: 16px;
+}
+
+/* Footer */
+.site-footer {
+    position: relative;
+    z-index: 1;
+    background: rgba(10, 10, 15, 0.85);
+    backdrop-filter: blur(20px);
+    border-top: 1px solid var(--border-color);
+    padding: var(--spacing-lg) var(--spacing-xl);
+    margin-top: var(--spacing-xl);
+}
+
+.footer-content {
+    max-width: 1600px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: var(--spacing-md);
+    flex-wrap: wrap;
+}
+
+.copyright {
+    font-size: var(--font-size-sm);
+    color: var(--text-muted);
+}
+
+.footer-divider {
+    color: var(--border-color-light);
+    font-size: var(--font-size-sm);
+}
+
+.footer-tagline {
+    font-size: var(--font-size-sm);
+    color: var(--text-muted);
+    background: var(--accent-gradient);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    font-weight: 500;
+}
+
+@media (max-width: 768px) {
+    .footer-content {
+        flex-direction: column;
+        gap: var(--spacing-sm);
+    }
+
+    .footer-divider {
+        display: none;
+    }
+}
+
+/* Verification Result Styles */
+.verification-result {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    padding: var(--spacing-md);
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md);
+    margin-top: var(--spacing-md);
+}
+
+.verification-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.verification-icon.success {
+    background: rgba(34, 197, 94, 0.15);
+    color: var(--success);
+}
+
+.verification-icon.success svg {
+    width: 20px;
+    height: 20px;
+    stroke: var(--success);
+}
+
+.verification-icon.review {
+    background: rgba(251, 191, 36, 0.15);
+    color: #fbbf24;
+}
+
+.verification-icon.review svg {
+    width: 20px;
+    height: 20px;
+    stroke: #fbbf24;
+}
+
+.verification-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.verification-status {
+    font-weight: 600;
+    font-size: var(--font-size-sm);
+    color: var(--text-primary);
+}
+
+.verification-result.review .verification-status {
+    color: #fbbf24;
+}
+
+.verification-details {
+    font-size: var(--font-size-xs);
+    color: var(--text-muted);
+}
+
+/* ============================================
+   HLD Pipeline Diagram Modal Styles
+   Interactive, Animated System Architecture View
+   ============================================ */
+
+/* Modal Overlay */
+.hld-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(10px);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-xl);
+    animation: fadeIn 0.3s ease;
+}
+
+.hld-modal-overlay.hidden {
+    display: none;
+}
+
+/* Modal Content */
+.hld-modal-content {
+    background: linear-gradient(145deg, rgba(18, 18, 26, 0.95) 0%, rgba(10, 10, 15, 0.98) 100%);
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    border-radius: var(--radius-xl);
+    width: 100%;
+    max-width: 1400px;
+    max-height: 90vh;
+    overflow: visible;
+    /* Allow tooltips to overflow */
+    box-shadow:
+        0 0 60px rgba(99, 102, 241, 0.15),
+        0 0 100px rgba(139, 92, 246, 0.1),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px) scale(0.98);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* Modal Header */
+.hld-modal-header {
+    padding: var(--spacing-xl) var(--spacing-2xl);
+    border-bottom: 1px solid var(--border-color);
+    position: relative;
+    background: linear-gradient(180deg, rgba(99, 102, 241, 0.08) 0%, transparent 100%);
+}
+
+.hld-modal-title {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+}
+
+.hld-modal-title svg {
+    color: var(--accent-primary);
+    filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.5));
+}
+
+.hld-modal-title h2 {
+    font-size: var(--font-size-2xl);
+    font-weight: 700;
+    background: linear-gradient(135deg, #fff 0%, #a0a0b0 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.hld-modal-subtitle {
+    font-size: var(--font-size-sm);
+    color: var(--text-muted);
+    margin-top: var(--spacing-xs);
+    margin-left: 40px;
+}
+
+.hld-modal-close {
+    position: absolute;
+    top: var(--spacing-lg);
+    right: var(--spacing-lg);
+    width: 40px;
+    height: 40px;
+    border: none;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: var(--radius-md);
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--transition-base);
+}
+
+.hld-modal-close:hover {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--error);
+    transform: rotate(90deg);
+}
+
+.hld-modal-close svg {
+    width: 20px;
+    height: 20px;
+}
+
+/* Modal Body */
+.hld-modal-body {
+    padding: var(--spacing-xl) var(--spacing-2xl);
+    padding-bottom: var(--spacing-2xl);
+    overflow: visible;
+    max-height: calc(90vh - 120px);
+}
+
+/* Pipeline Container */
+.hld-pipeline-container {
+    position: relative;
+    padding: var(--spacing-lg) var(--spacing-xl);
+    padding-bottom: 120px;
+    /* Space for tooltips below */
+    min-height: 300px;
+    overflow: visible;
+}
+
+/* SVG Flow Lines */
+.hld-flow-lines {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 100px;
+    transform: translateY(-50%);
+    z-index: 0;
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.flow-path {
+    stroke-dasharray: 8 4;
+    animation: flowDash 2s linear infinite;
+}
+
+@keyframes flowDash {
+    from {
+        stroke-dashoffset: 24;
+    }
+
+    to {
+        stroke-dashoffset: 0;
+    }
+}
+
+.flow-particle {
+    opacity: 0.8;
+}
+
+/* Pipeline Steps Row */
+.hld-steps-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--spacing-md);
+    position: relative;
+    z-index: 1;
+}
+
+/* Individual Step */
+.hld-step {
+    flex: 1;
+    max-width: 160px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-lg);
+    background: rgba(26, 26, 46, 0.6);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
+    backdrop-filter: blur(10px);
+}
+
+.hld-step:hover {
+    transform: translateY(-8px) scale(1.05);
+    border-color: var(--accent-primary);
+    background: rgba(99, 102, 241, 0.1);
+    box-shadow:
+        0 20px 40px rgba(0, 0, 0, 0.3),
+        0 0 30px rgba(99, 102, 241, 0.2);
+}
+
+.hld-step:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.3);
+}
+
+/* Step Icon */
+.hld-step-icon {
+    width: 60px;
+    height: 60px;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: var(--spacing-xs);
+    position: relative;
+    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.hld-step-icon::before {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    border-radius: inherit;
+    background: inherit;
+    opacity: 0.3;
+    filter: blur(8px);
+    z-index: -1;
+}
+
+.hld-step-icon svg {
+    width: 28px;
+    height: 28px;
+    color: white;
+}
+
+.hld-step:hover .hld-step-icon {
+    transform: scale(1.1);
+}
+
+/* Icon Color Variations */
+.hld-step-icon.email {
+    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+}
+
+.hld-step-icon.gmail {
+    background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+}
+
+.hld-step-icon.classify {
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+}
+
+.hld-step-icon.docs {
+    background: linear-gradient(135deg, #d946ef 0%, #c026d3 100%);
+    /* Fuchsia */
+}
+
+.hld-step-icon.database {
+    background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+    /* Cyan */
+}
+
+.hld-step-icon.policy {
+    background: linear-gradient(135deg, #e11d48 0%, #be123c 100%);
+    /* Rose/Red */
+}
+
+.hld-step-icon.decision {
+    background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+}
+
+/* Step Label */
+.hld-step-label {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--text-primary);
+    text-align: center;
+    line-height: 1.3;
+}
+
+/* Step Badge */
+.hld-step-badge {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 4px 10px;
+    border-radius: var(--radius-full);
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-muted);
+    border: 1px solid var(--border-color);
+}
+
+.hld-step-badge.input {
+    background: rgba(59, 130, 246, 0.15);
+    /* Blue */
+    color: #60a5fa;
+    border-color: rgba(59, 130, 246, 0.3);
+}
+
+.hld-step-badge.trigger {
+    background: rgba(249, 115, 22, 0.15);
+    /* Orange */
+    color: #fb923c;
+    border-color: rgba(249, 115, 22, 0.3);
+}
+
+.hld-step-badge.gemini {
+    background: rgba(99, 102, 241, 0.15);
+    /* Indigo */
+    color: #818cf8;
+    border-color: rgba(99, 102, 241, 0.3);
+}
+
+.hld-step-badge.mcp {
+    background: rgba(217, 70, 239, 0.15);
+    /* Fuchsia */
+    color: #e879f9;
+    border-color: rgba(217, 70, 239, 0.3);
+}
+
+.hld-step-badge.postgres {
+    background: rgba(6, 182, 212, 0.15);
+    /* Cyan */
+    color: #22d3ee;
+    border-color: rgba(6, 182, 212, 0.3);
+}
+
+.hld-step-badge.neo4j {
+    background: rgba(225, 29, 72, 0.15);
+    /* Rose/Red */
+    color: #fb7185;
+    border-color: rgba(225, 29, 72, 0.3);
+}
+
+.hld-step-badge.output {
+    background: rgba(34, 197, 94, 0.15);
+    /* Green */
+    color: #4ade80;
+    border-color: rgba(34, 197, 94, 0.3);
+}
+
+/* Step Tooltip - Positioned BELOW the step */
+.hld-step-tooltip {
+    position: absolute;
+    top: calc(100% + 16px);
+    left: 50%;
+    transform: translateX(-50%) translateY(-10px);
+    width: 280px;
+    padding: var(--spacing-lg);
+    background: rgba(26, 26, 46, 0.98);
+    border: 1px solid rgba(99, 102, 241, 0.4);
+    border-radius: var(--radius-lg);
+    box-shadow:
+        0 20px 50px rgba(0, 0, 0, 0.5),
+        0 0 40px rgba(99, 102, 241, 0.15);
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    z-index: 100;
+    backdrop-filter: blur(20px);
+}
+
+/* Arrow pointing UP to the step */
+.hld-step-tooltip::after {
+    content: '';
+    position: absolute;
+    top: -8px;
+    left: 50%;
+    transform: translateX(-50%) rotate(45deg);
+    width: 16px;
+    height: 16px;
+    background: rgba(26, 26, 46, 0.98);
+    border-left: 1px solid rgba(99, 102, 241, 0.4);
+    border-top: 1px solid rgba(99, 102, 241, 0.4);
+}
+
+.hld-step:hover .hld-step-tooltip,
+.hld-step:focus .hld-step-tooltip {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0);
+}
+
+/* Edge-aware tooltip positioning for first step */
+.hld-step:first-child .hld-step-tooltip {
+    left: 0;
+    transform: translateX(0) translateY(-10px);
+}
+
+.hld-step:first-child .hld-step-tooltip::after {
+    left: 70px;
+}
+
+.hld-step:first-child:hover .hld-step-tooltip,
+.hld-step:first-child:focus .hld-step-tooltip {
+    transform: translateX(0) translateY(0);
+}
+
+/* Edge-aware tooltip positioning for last step */
+.hld-step:last-child .hld-step-tooltip {
+    left: auto;
+    right: 0;
+    transform: translateX(0) translateY(-10px);
+}
+
+.hld-step:last-child .hld-step-tooltip::after {
+    left: auto;
+    right: 70px;
+}
+
+.hld-step:last-child:hover .hld-step-tooltip,
+.hld-step:last-child:focus .hld-step-tooltip {
+    transform: translateX(0) translateY(0);
+}
+
+.hld-step-tooltip h4 {
+    font-size: var(--font-size-base);
+    font-weight: 600;
+    margin-bottom: var(--spacing-sm);
+    color: var(--text-primary);
+}
+
+.hld-step-tooltip p {
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin-bottom: var(--spacing-md);
+}
+
+.hld-step-tooltip strong {
+    color: var(--accent-primary);
+}
+
+.tooltip-details {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-sm);
+}
+
+.tooltip-details .detail-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--font-size-xs);
+    color: var(--text-muted);
+    padding: 4px 10px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-color);
+}
+
+.tooltip-details .detail-item svg {
+    color: var(--accent-primary);
+    flex-shrink: 0;
+}
+
+/* Category Colors in Tooltip */
+.tooltip-details .category-return {
+    background: rgba(249, 115, 22, 0.15);
+    color: #fb923c;
+    border-color: rgba(249, 115, 22, 0.3);
+}
+
+.tooltip-details .category-refund {
+    background: rgba(34, 197, 94, 0.15);
+    color: #4ade80;
+    border-color: rgba(34, 197, 94, 0.3);
+}
+
+.tooltip-details .category-replace {
+    background: rgba(59, 130, 246, 0.15);
+    color: #60a5fa;
+    border-color: rgba(59, 130, 246, 0.3);
+}
+
+.tooltip-details .decision-approve {
+    background: rgba(34, 197, 94, 0.15);
+    color: #4ade80;
+    border-color: rgba(34, 197, 94, 0.3);
+}
+
+.tooltip-details .decision-deny {
+    background: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+    border-color: rgba(239, 68, 68, 0.3);
+}
+
+.tooltip-details .decision-review {
+    background: rgba(251, 191, 36, 0.15);
+    color: #fbbf24;
+    border-color: rgba(251, 191, 36, 0.3);
+}
+
+/* Technology Legend */
+.hld-legend {
+    margin-top: var(--spacing-2xl);
+    padding: var(--spacing-lg);
+    background: rgba(26, 26, 46, 0.4);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+}
+
+.hld-legend h4 {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: var(--spacing-md);
+}
+
+.legend-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    /* reduced gap */
+    justify-content: center;
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    /* smaller font */
+    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.05);
+    /* subtle background */
+    padding: 4px 10px;
+    border-radius: 4px;
+    /* somewhat square like the image */
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: all 0.2s ease;
+}
+
+.legend-item:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(99, 102, 241, 0.3);
+    transform: translateY(-1px);
+}
+
+.legend-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    position: relative;
+}
+
+.legend-dot::after {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: 50%;
+    background: inherit;
+    opacity: 0.4;
+    filter: blur(4px);
+}
+
+.legend-dot.gemini {
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+}
+
+.legend-dot.mcp {
+    background: linear-gradient(135deg, #8b5cf6, #a855f7);
+}
+
+.legend-dot.neo4j {
+    background: linear-gradient(135deg, #008cc1, #0066a1);
+}
+
+.legend-dot.postgres {
+    background: linear-gradient(135deg, #06b6d4, #0891b2);
+}
+
+.legend-dot.gcp {
+    background: linear-gradient(135deg, #f97316, #ea580c);
+}
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+    .hld-steps-row {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .hld-step {
+        max-width: 140px;
+    }
+
+    .hld-flow-lines {
+        display: none;
+    }
+}
+
+@media (max-width: 768px) {
+    .hld-modal-content {
+        max-height: 95vh;
+        border-radius: var(--radius-lg);
+    }
+
+    .hld-modal-header {
+        padding: var(--spacing-lg);
+    }
+
+    .hld-modal-body {
+        padding: var(--spacing-lg);
+    }
+
+    .hld-modal-title h2 {
+        font-size: var(--font-size-xl);
+    }
+
+    .hld-steps-row {
+        flex-direction: column;
+        gap: var(--spacing-md);
+    }
+
+    .hld-step {
+        max-width: 100%;
+        width: 100%;
+        flex-direction: row;
+        justify-content: flex-start;
+        gap: var(--spacing-md);
+        padding: var(--spacing-md);
+    }
+
+    .hld-step-icon {
+        width: 50px;
+        height: 50px;
+        margin-bottom: 0;
+    }
+
+    .hld-step-icon svg {
+        width: 24px;
+        height: 24px;
+    }
+
+    .hld-step:hover {
+        transform: translateX(8px) scale(1.02);
+    }
+
+    .hld-step-tooltip {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        bottom: auto;
+        transform: translate(-50%, -50%) scale(0.95);
+        width: calc(100vw - 32px);
+        max-width: 320px;
+    }
+
+    .hld-step-tooltip::after {
+        display: none;
+    }
+
+    .hld-step:hover .hld-step-tooltip,
+    .hld-step:focus .hld-step-tooltip {
+        transform: translate(-50%, -50%) scale(1);
+    }
+
+    .legend-items {
+        gap: var(--spacing-md);
+    }
+}
+
+/* Connection Lines Animation for Desktop */
+@media (min-width: 1201px) {
+    .hld-step::before {
+        content: '';
+        position: absolute;
+        right: -50%;
+        top: 50%;
+        width: 50%;
+        height: 2px;
+        background: linear-gradient(90deg,
+                rgba(99, 102, 241, 0.5) 0%,
+                rgba(139, 92, 246, 0.3) 50%,
+                transparent 100%);
+        transform: translateY(-50%);
+        z-index: -1;
+    }
+
+    .hld-step:last-child::before {
+        display: none;
+    }
+
+    .hld-step:hover::before {
+        background: linear-gradient(90deg,
+                rgba(99, 102, 241, 0.8) 0%,
+                rgba(139, 92, 246, 0.5) 50%,
+                transparent 100%);
+    }
 }

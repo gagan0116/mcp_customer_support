@@ -175,9 +175,6 @@ function handleScenarioChange(e) {
         state.selectedScenario = scenario;
         populateEmailPreview(scenario);
 
-        // Reset pipeline
-        resetPipeline();
-
         addLog('info', `Scenario loaded: ${scenario.category} request from ${scenario.user_id}`);
     }
 }
@@ -551,7 +548,7 @@ function updateStepData(step, data) {
                 state.verifiedData._needs_review = true;
                 state.verifiedData._fuzzy_tools = data.fuzzy_tools_used;
                 state.verifiedData._confidence = data.confidence || 'low';
-                
+
                 // Update verification result UI to show review state
                 const verificationResult = document.getElementById('verificationResult');
                 if (verificationResult) {
@@ -560,12 +557,18 @@ function updateStepData(step, data) {
                     const statusEl = verificationResult.querySelector('.verification-status');
                     const detailsEl = verificationResult.querySelector('.verification-details');
                     const iconEl = verificationResult.querySelector('.verification-icon');
+                    const successIcon = verificationResult.querySelector('.icon-success');
+                    const reviewIcon = verificationResult.querySelector('.icon-review');
+
                     if (statusEl) statusEl.textContent = 'Suggested Order - Review Required';
                     if (detailsEl) detailsEl.textContent = `Found via: ${data.fuzzy_tools_used.join(', ')} | Confidence: ${data.confidence || 'low'}`;
                     if (iconEl) {
                         iconEl.classList.remove('success');
                         iconEl.classList.add('review');
                     }
+                    // Show warning icon, hide success icon
+                    if (successIcon) successIcon.style.display = 'none';
+                    if (reviewIcon) reviewIcon.style.display = 'block';
                 }
             } else if (data.order_id) {
                 // Direct match - could update verification details panel if it exists
@@ -780,14 +783,20 @@ function resetVerificationSubsteps() {
     if (resultEl) {
         resultEl.style.display = 'none';
         resultEl.classList.remove('review');
-        
+
         // Reset icon state
         const iconEl = resultEl.querySelector('.verification-icon');
         if (iconEl) {
             iconEl.classList.remove('review');
             iconEl.classList.add('success');
         }
-        
+
+        // Reset icon visibility (show success, hide review)
+        const successIcon = resultEl.querySelector('.icon-success');
+        const reviewIcon = resultEl.querySelector('.icon-review');
+        if (successIcon) successIcon.style.display = 'block';
+        if (reviewIcon) reviewIcon.style.display = 'none';
+
         // Reset text
         const statusEl = resultEl.querySelector('.verification-status');
         const detailsEl = resultEl.querySelector('.verification-details');
@@ -930,6 +939,16 @@ function resetPipeline() {
     elements.pipelineTimer.classList.add('hidden');
     elements.timerValue.textContent = '00:00';
 
+    // Clear parsed files from previous scenario
+    if (elements.parsedFiles) {
+        elements.parsedFiles.innerHTML = '';
+    }
+
+    // Reset defect analysis to default state
+    if (elements.defectAnalysis) {
+        elements.defectAnalysis.innerHTML = '<span class="no-images-text">No defect images in this request</span>';
+    }
+
     // Reset adjudication sub-steps
     resetSubsteps();
 
@@ -1059,14 +1078,34 @@ const TooltipManager = {
         this.bubble.className = 'tooltip-bubble';
         document.body.appendChild(this.bubble);
 
+        // Track hover state
+        this.hoverTimeout = null;
+        this.hideTimeout = null;
+        this.isHovering = false;
+        this.triggeredByClick = false;
+
         // Event listeners
-        this.overlay.addEventListener('click', () => this.hide());
+        this.overlay.addEventListener('click', () => this.forceHide());
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') this.hide();
+            if (e.key === 'Escape') this.forceHide();
         });
 
-        // Attach click handlers to all info icons
+        // Close tooltip when clicking anywhere outside
+        document.addEventListener('click', (e) => {
+            if (this.triggeredByClick && this.activeIcon) {
+                // Check if click is outside the tooltip and icon
+                const clickedIcon = e.target.closest('.info-icon');
+                const clickedBubble = e.target.closest('.tooltip-bubble');
+
+                if (!clickedIcon && !clickedBubble) {
+                    this.forceHide();
+                }
+            }
+        });
+
+        // Attach click and hover handlers to all info icons
         document.querySelectorAll('.info-icon').forEach(icon => {
+            // Click to toggle (for mobile and accessibility)
             icon.addEventListener('click', (e) => this.toggle(e, icon));
             icon.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
@@ -1074,27 +1113,78 @@ const TooltipManager = {
                     this.toggle(e, icon);
                 }
             });
+
+            // Hover to show (desktop)
+            icon.addEventListener('mouseenter', () => {
+                this.isHovering = true;
+                // Clear any pending hide
+                if (this.hideTimeout) {
+                    clearTimeout(this.hideTimeout);
+                }
+                // Small delay to prevent accidental triggers
+                this.hoverTimeout = setTimeout(() => {
+                    if (this.isHovering) {
+                        this.show(icon, false);
+                    }
+                }, 200);
+            });
+
+            icon.addEventListener('mouseleave', () => {
+                this.isHovering = false;
+                if (this.hoverTimeout) {
+                    clearTimeout(this.hoverTimeout);
+                }
+                // Small delay before hiding to allow moving to tooltip
+                this.hideTimeout = setTimeout(() => {
+                    if (!this.isHovering && !this.triggeredByClick && !this.bubble.matches(':hover')) {
+                        this.hide();
+                    }
+                }, 300);
+            });
+        });
+
+        // Allow hovering over the tooltip bubble itself
+        this.bubble.addEventListener('mouseenter', () => {
+            this.isHovering = true;
+            if (this.hideTimeout) {
+                clearTimeout(this.hideTimeout);
+            }
+        });
+
+        this.bubble.addEventListener('mouseleave', () => {
+            this.isHovering = false;
+            this.hideTimeout = setTimeout(() => {
+                if (!this.isHovering && !this.triggeredByClick) {
+                    this.hide();
+                }
+            }, 300);
         });
     },
 
     toggle(event, icon) {
         event.stopPropagation();
-        
-        if (this.activeIcon === icon) {
-            this.hide();
+
+        if (this.activeIcon === icon && this.triggeredByClick) {
+            this.forceHide();
         } else {
-            this.show(icon);
+            this.triggeredByClick = true;
+            this.show(icon, true);
         }
     },
 
-    show(icon) {
+    show(icon, fromClick = false) {
         const tooltipId = icon.getAttribute('data-tooltip');
         const content = this.tooltips[tooltipId];
-        
+
         if (!content) return;
 
+        // If already showing this tooltip, don't re-trigger
+        if (this.activeIcon === icon && this.bubble.classList.contains('visible')) {
+            return;
+        }
+
         // Hide any existing tooltip first
-        if (this.activeIcon) {
+        if (this.activeIcon && this.activeIcon !== icon) {
             this.activeIcon.classList.remove('active');
         }
 
@@ -1132,20 +1222,42 @@ const TooltipManager = {
         this.bubble.style.left = `${Math.max(padding, left)}px`;
         this.bubble.style.top = `${Math.max(padding, top)}px`;
 
-        // Show elements
-        this.overlay.classList.remove('hidden');
+        // Only show overlay on click (not hover) to prevent flickering
+        if (fromClick) {
+            this.overlay.classList.remove('hidden');
+            this.triggeredByClick = true;
+        } else {
+            this.overlay.classList.add('hidden');
+            this.triggeredByClick = false;
+        }
+
         this.bubble.classList.add('visible');
         icon.classList.add('active');
         this.activeIcon = icon;
     },
 
     hide() {
+        // Don't hide if triggered by click and still hovering
+        if (this.triggeredByClick && this.isHovering) {
+            return;
+        }
+        this._doHide();
+    },
+
+    forceHide() {
+        // Force close regardless of hover state (used for click-outside and Escape)
+        this._doHide();
+    },
+
+    _doHide() {
         this.overlay.classList.add('hidden');
         this.bubble.classList.remove('visible');
         if (this.activeIcon) {
             this.activeIcon.classList.remove('active');
             this.activeIcon = null;
         }
+        this.triggeredByClick = false;
+        this.isHovering = false;
     }
 };
 
@@ -1178,14 +1290,91 @@ function initOnboarding() {
         });
     }
 
-    // Help link to show banner again
+    // Help link to show HLD diagram modal
     if (helpLink) {
         helpLink.addEventListener('click', (e) => {
             e.preventDefault();
-            banner.classList.remove('hidden');
-            banner.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            openHLDModal();
         });
     }
 }
 
 document.addEventListener('DOMContentLoaded', initOnboarding);
+
+// ============================================
+// HLD Pipeline Diagram Modal
+// ============================================
+function initHLDModal() {
+    const hldModal = document.getElementById('hldModal');
+    const hldModalClose = document.getElementById('hldModalClose');
+
+    if (!hldModal) return;
+
+    // Close button handler
+    if (hldModalClose) {
+        hldModalClose.addEventListener('click', closeHLDModal);
+    }
+
+    // Close on overlay click
+    hldModal.addEventListener('click', (e) => {
+        if (e.target === hldModal) {
+            closeHLDModal();
+        }
+    });
+
+    // Close on Escape key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !hldModal.classList.contains('hidden')) {
+            closeHLDModal();
+        }
+    });
+
+    // Add keyboard navigation and hover behavior
+    const steps = hldModal.querySelectorAll('.hld-step');
+    steps.forEach((step, index) => {
+        // Auto-close other tooltips on hover
+        step.addEventListener('mouseenter', () => {
+            if (document.activeElement && document.activeElement.classList.contains('hld-step') && document.activeElement !== step) {
+                document.activeElement.blur();
+            }
+        });
+
+        step.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight' && index < steps.length - 1) {
+                steps[index + 1].focus();
+            } else if (e.key === 'ArrowLeft' && index > 0) {
+                steps[index - 1].focus();
+            } else if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                // Toggle tooltip visibility on Enter/Space
+                step.focus();
+            }
+        });
+    });
+}
+
+function openHLDModal() {
+    const hldModal = document.getElementById('hldModal');
+    if (hldModal) {
+        hldModal.classList.remove('hidden');
+        document.body.style.overflow = 'hidden'; // Prevent background scroll
+
+        // Focus first step for accessibility
+        const firstStep = hldModal.querySelector('.hld-step');
+        if (firstStep) {
+            setTimeout(() => firstStep.focus(), 300); // Wait for animation
+        }
+
+        addLog('info', '📊 Opened system architecture diagram');
+    }
+}
+
+function closeHLDModal() {
+    const hldModal = document.getElementById('hldModal');
+    if (hldModal) {
+        hldModal.classList.add('hidden');
+        document.body.style.overflow = ''; // Restore scroll
+    }
+}
+
+document.addEventListener('DOMContentLoaded', initHLDModal);
