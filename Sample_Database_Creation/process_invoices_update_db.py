@@ -179,7 +179,7 @@ def gemini_extract(text: str, model: str, api_key: str) -> Dict[str, Any]:
                         "Dates must be YYYY-MM-DD. "
                         "Numbers must be plain strings (no currency symbols)."
                     ),
-                    temperature=0.0,
+                    temperature=1.0,
                     response_mime_type="application/json",
                     response_schema=INVOICE_SCHEMA,
                 ),

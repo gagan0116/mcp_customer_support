@@ -41,7 +41,7 @@ def classify_email(subject, body):
         model="gemini-3-flash-preview",
         contents=CLASSIFICATION_PROMPT.format(subject=subject, body=body),
         config=types.GenerateContentConfig(
-            temperature=0,
+            temperature=1,
             response_mime_type="application/json",
             response_schema={
                 "type": "object",

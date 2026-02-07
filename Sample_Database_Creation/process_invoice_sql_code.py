@@ -126,7 +126,7 @@ def gemini_extract(invoice_text: str, model: str, api_key: str) -> Dict[str, Any
         contents=invoice_text,
         config=types.GenerateContentConfig(
             system_instruction=system_instruction,
-            temperature=0.0,
+            temperature=1.0,
             response_mime_type="application/json",
             response_schema=INVOICE_EXTRACT_SCHEMA,
         ),

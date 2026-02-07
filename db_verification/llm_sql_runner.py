@@ -369,7 +369,7 @@ def _make_generate_config(model: str) -> types.GenerateContentConfig:
     """
     kwargs: Dict[str, Any] = {
         "response_mime_type": "application/json",
-        "temperature": 0.0,
+        "temperature": 1.0,
     }
 
     # thinking_config (Gemini 3) – reduce latency
