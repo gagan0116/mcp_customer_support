@@ -367,7 +367,7 @@ def main():
         print(f"Processing {pdf.name}...")
         try:
             text = extract_pdf_text(pdf)
-            extracted = gemini_extract(text, "gemini-2.5-flash", api_key)
+            extracted = gemini_extract(text, "gemini-3-flash-preview", api_key)
 
             full_name = extracted["customer"]["full_name"]
             customer_id = fetch_customer_id(conn, full_name)

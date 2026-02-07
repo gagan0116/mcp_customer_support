@@ -33,7 +33,7 @@ Email Body:
 
 def classify_email(subject, body):
     genai.configure(api_key=load_gemini_api_key())
-    model = genai.GenerativeModel("models/gemini-2.0-flash")
+    model = genai.GenerativeModel("models/gemini-3-flash-preview")
 
     body = body[:4000]
 

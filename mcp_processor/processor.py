@@ -380,7 +380,7 @@ Extract all order and customer details from the text above."""
             
             try:
                 response = await self.generate_with_retry(
-                    model='gemini-3-flash', 
+                    model='gemini-3-flash-preview', 
                     contents=prompt_content,
                     config={"response_mime_type": "application/json"}
                 )
@@ -530,7 +530,7 @@ Extract all order and customer details from the text above."""
             
             try:
                 response = await self.generate_with_retry(
-                    model='gemini-3-flash', 
+                    model='gemini-3-flash-preview', 
                     contents=prompt_content,
                     config={"response_mime_type": "application/json"}
                 )

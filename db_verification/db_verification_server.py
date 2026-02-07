@@ -596,7 +596,7 @@ def get_customer_orders_with_items(
 def select_order_id(
     customer_orders_payload: Dict[str, Any],
     email_info: Dict[str, Any],
-    model: str = "gemini-2.0-flash",
+    model: str = "gemini-3-flash-preview",
 ) -> Dict[str, Any]:
     """
     Use an LLM (Gemini) to heuristically select the best matching order from history.
@@ -609,7 +609,7 @@ def select_order_id(
         customer_orders_payload (Dict): The JSON output from `get_customer_orders_with_items`.
         email_info (Dict): The structured info extracted from the user's email 
                            (must not contain a reliable invoice ID, otherwise you wouldn't use this tool).
-        model (str, optional): The Gemini model to use for reasoning. Defaults to "gemini-2.0-flash".
+        model (str, optional): The Gemini model to use for reasoning. Defaults to "gemini-3-flash-preview".
 
     Returns:
         Dict[str, Any]:
