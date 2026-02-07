@@ -42,7 +42,24 @@ def classify_email(subject, body):
         contents=CLASSIFICATION_PROMPT.format(subject=subject, body=body),
         config=types.GenerateContentConfig(
             temperature=0,
-            response_mime_type="application/json"
+            response_mime_type="application/json",
+            response_schema={
+                "type": "object",
+                "properties": {
+                    "category": {
+                        "type": "string",
+                        "enum": ["RETURN", "REPLACEMENT", "REFUND", "NONE"]
+                    },
+                    "user_id": {
+                        "type": "string",
+                        "nullable": True
+                    },
+                    "confidence": {
+                        "type": "number"
+                    }
+                },
+                "required": ["category", "confidence"]
+            }
         )
     )
 
