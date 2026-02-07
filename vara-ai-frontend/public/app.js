@@ -1162,6 +1162,15 @@ const TooltipManager = {
                 }
             }, 300);
         });
+
+        // Continuously reposition tooltip via rAF so it tracks the icon during scroll
+        this._rafId = null;
+        this._trackPosition = () => {
+            if (this.activeIcon && this.bubble.classList.contains('visible')) {
+                this._position(this.activeIcon);
+                this._rafId = requestAnimationFrame(this._trackPosition);
+            }
+        };
     },
 
     toggle(event, icon) {
@@ -1173,6 +1182,34 @@ const TooltipManager = {
             this.triggeredByClick = true;
             this.show(icon, true);
         }
+    },
+
+    // Separate positioning logic so it can be called on scroll
+    _position(icon) {
+        const rect = icon.getBoundingClientRect();
+        const bubbleWidth = 320;
+        const bubbleHeight = this.bubble.offsetHeight;
+        const padding = 12;
+
+        // Use viewport-relative coords (position:fixed)
+        let left = rect.left;
+        let top = rect.bottom + padding;
+
+        // Reset arrow classes
+        this.bubble.classList.remove('arrow-right', 'arrow-bottom');
+
+        if (left + bubbleWidth > window.innerWidth - padding) {
+            left = window.innerWidth - bubbleWidth - padding;
+            this.bubble.classList.add('arrow-right');
+        }
+
+        if (top + bubbleHeight > window.innerHeight - padding) {
+            top = rect.top - bubbleHeight - padding;
+            this.bubble.classList.add('arrow-bottom');
+        }
+
+        this.bubble.style.left = `${Math.max(padding, left)}px`;
+        this.bubble.style.top = `${Math.max(padding, top)}px`;
     },
 
     show(icon, fromClick = false) {
@@ -1203,33 +1240,11 @@ const TooltipManager = {
         this.bubble.style.opacity = '0';
         this.bubble.classList.add('visible');
 
-        // Position the bubble
-        const rect = icon.getBoundingClientRect();
-        const bubbleWidth = 320;
-        const bubbleHeight = this.bubble.offsetHeight;
-        const padding = 12;
+        this._position(icon);
 
-        // Default: show below the icon
-        let left = rect.left;
-        let top = rect.bottom + padding;
-
-        // Reset arrow classes
-        this.bubble.classList.remove('arrow-right', 'arrow-bottom');
-
-        // Adjust horizontal position if off-screen
-        if (left + bubbleWidth > window.innerWidth - padding) {
-            left = window.innerWidth - bubbleWidth - padding;
-            this.bubble.classList.add('arrow-right');
-        }
-
-        // Only show above if there's truly no room below
-        if (top + bubbleHeight > window.innerHeight - padding) {
-            top = rect.top - bubbleHeight - padding;
-            this.bubble.classList.add('arrow-bottom');
-        }
-
-        this.bubble.style.left = `${Math.max(padding, left)}px`;
-        this.bubble.style.top = `${Math.max(padding, top)}px`;
+        // Start tracking position
+        if (this._rafId) cancelAnimationFrame(this._rafId);
+        this._rafId = requestAnimationFrame(this._trackPosition);
 
         // Restore visibility
         this.bubble.style.visibility = '';
@@ -1264,6 +1279,10 @@ const TooltipManager = {
     },
 
     _doHide() {
+        if (this._rafId) {
+            cancelAnimationFrame(this._rafId);
+            this._rafId = null;
+        }
         this.overlay.classList.add('hidden');
         this.bubble.classList.remove('visible');
         if (this.activeIcon) {
@@ -1304,122 +1323,9 @@ function initOnboarding() {
         });
     }
 
-    // Help link to show HLD diagram modal
-    if (helpLink) {
-        helpLink.addEventListener('click', (e) => {
-            e.preventDefault();
-            openHLDModal();
-        });
-    }
+    // Help link handled by shared hld-modal.js
 }
 
 document.addEventListener('DOMContentLoaded', initOnboarding);
 
-// ============================================
-// HLD Pipeline Diagram Modal
-// ============================================
-function initHLDModal() {
-    const hldModal = document.getElementById('hldModal');
-    const hldModalClose = document.getElementById('hldModalClose');
-
-    if (!hldModal) return;
-
-    // Close button handler
-    if (hldModalClose) {
-        hldModalClose.addEventListener('click', closeHLDModal);
-    }
-
-    // Close on overlay click
-    hldModal.addEventListener('click', (e) => {
-        if (e.target === hldModal) {
-            closeHLDModal();
-        }
-    });
-
-    // Close on Escape key
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && !hldModal.classList.contains('hidden')) {
-            closeHLDModal();
-        }
-    });
-
-    // Add keyboard navigation and click-to-toggle behavior
-    const steps = hldModal.querySelectorAll('.hld-step');
-    steps.forEach((step, index) => {
-        // Click-to-toggle tooltip on all screen sizes
-        step.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const isActive = step.classList.contains('active');
-            // Close all other steps first
-            steps.forEach(s => s.classList.remove('active'));
-            // Toggle this step
-            if (!isActive) {
-                step.classList.add('active');
-                // On small screens, scroll the expanded step into view
-                if (window.innerWidth <= 1200) {
-                    setTimeout(() => {
-                        step.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                    }, 100);
-                }
-            }
-        });
-
-        // On desktop, clear stale .active from other steps on hover
-        step.addEventListener('mouseenter', () => {
-            if (window.innerWidth > 1200) {
-                steps.forEach(s => { if (s !== step) s.classList.remove('active'); });
-            }
-        });
-
-        step.addEventListener('keydown', (e) => {
-            if (e.key === 'ArrowRight' && index < steps.length - 1) {
-                steps[index + 1].focus();
-            } else if (e.key === 'ArrowLeft' && index > 0) {
-                steps[index - 1].focus();
-            } else if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                step.click();
-            }
-        });
-    });
-
-    // Close tooltip when clicking outside any step
-    hldModal.addEventListener('click', (e) => {
-        if (!e.target.closest('.hld-step')) {
-            steps.forEach(s => s.classList.remove('active'));
-        }
-    });
-}
-
-function openHLDModal() {
-    const hldModal = document.getElementById('hldModal');
-    if (hldModal) {
-        hldModal.classList.remove('hidden');
-        document.body.style.overflow = 'hidden'; // Prevent background scroll
-
-        // Auto-open first tooltip and focus
-        const firstStep = hldModal.querySelector('.hld-step');
-        if (firstStep) {
-            // Clear any previously active steps
-            hldModal.querySelectorAll('.hld-step.active').forEach(s => s.classList.remove('active'));
-            setTimeout(() => {
-                firstStep.classList.add('active');
-                firstStep.focus();
-            }, 300);
-        }
-
-        addLog('info', '📊 Opened system architecture diagram');
-    }
-}
-
-function closeHLDModal() {
-    const hldModal = document.getElementById('hldModal');
-    if (hldModal) {
-        hldModal.classList.add('hidden');
-        document.body.style.overflow = ''; // Restore scroll
-        // Clear any active tooltips
-        hldModal.querySelectorAll('.hld-step.active').forEach(s => s.classList.remove('active'));
-    }
-}
-
-document.addEventListener('DOMContentLoaded', initHLDModal);
+// HLD Modal is now handled by the shared hld-modal.js
