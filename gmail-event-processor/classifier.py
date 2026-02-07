@@ -1,5 +1,6 @@
 import json
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from secret_manager import load_gemini_api_key
 
 CONFIDENCE_THRESHOLD = 0.75
@@ -32,17 +33,17 @@ Email Body:
 """
 
 def classify_email(subject, body):
-    genai.configure(api_key=load_gemini_api_key())
-    model = genai.GenerativeModel("models/gemini-3-flash-preview")
+    client = genai.Client(api_key=load_gemini_api_key())
 
     body = body[:4000]
 
-    response = model.generate_content(
-        CLASSIFICATION_PROMPT.format(subject=subject, body=body),
-        generation_config={
-            "temperature": 0,
-            "response_mime_type": "application/json"
-        }
+    response = client.models.generate_content(
+        model="gemini-3-flash-preview",
+        contents=CLASSIFICATION_PROMPT.format(subject=subject, body=body),
+        config=types.GenerateContentConfig(
+            temperature=0,
+            response_mime_type="application/json"
+        )
     )
 
     result = json.loads(response.text)
