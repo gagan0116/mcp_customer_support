@@ -20,6 +20,7 @@
             height: 24px;
         }
     </style>
+    <link rel="stylesheet" href="navbar.css">
     <link rel="stylesheet" href="styles.css">
 </head>
 
@@ -33,48 +34,8 @@
         <div class="orb orb-3"></div>
     </div>
 
-    <!-- Header -->
-    <header class="header">
-        <div class="header-content">
-            <div class="logo">
-                <div class="logo-icon" style="overflow: hidden;">
-                    <img src="favicon.png" alt="Logo" style="width: 100%; height: 100%; object-fit: contain;">
-                </div>
-                <div class="logo-text">
-                    <span class="logo-title">VARA-AI</span>
-                    <span class="logo-subtitle">AI based Customer Support</span>
-                </div>
-            </div>
-            <nav class="header-nav">
-                <a href="#" class="nav-link active">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-                    </svg>
-                    <span>Email Pipeline</span>
-                </a>
-                <a href="policy-knowledge-base/index.html" class="nav-link">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="18" cy="5" r="3" />
-                        <circle cx="6" cy="12" r="3" />
-                        <circle cx="18" cy="19" r="3" />
-                        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
-                        <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
-                    </svg>
-                    <span>Policy Knowledge Base</span>
-                </a>
-            </nav>
-            <a href="#" class="help-link" id="helpLink">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                    stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="10" />
-                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-                    <line x1="12" y1="17" x2="12.01" y2="17" />
-                </svg>
-                How it works
-            </a>
-
-        </div>
-    </header>
+    <!-- Shared Navbar (injected by navbar.js) -->
+    <div id="navbar-placeholder"></div>
 
     <!-- Onboarding Banner -->
     <div class="onboarding-banner" id="onboardingBanner">
@@ -84,7 +45,7 @@
             </svg>
         </div>
         <div class="onboarding-content">
-            <h3 class="onboarding-title">Welcome to VARA.ai</h3>
+            <h3 class="onboarding-title">Welcome to VARA-AI</h3>
             <p class="onboarding-text">VARA AI is a multi-agent customer support platform built with Gemini 3, Neo4j,
                 and MCP that delivers verified refund decisions with grounded, explainable reasoning from a policy
                 knowledge graph. Select a demo scenario, hit Process, and watch the pipeline in action. Tap the
@@ -123,7 +84,7 @@
                 </div>
                 <div class="scenario-select-wrapper">
                     <select id="scenarioSelect" class="select-input">
-                        <option value="">-- Choose a demo scenario --</option>
+                        <option value="">Choose a demo scenario</option>
                     </select>
                     <div class="select-arrow">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -617,12 +578,18 @@
                             </filter>
                         </defs>
                         <!-- 6 connection paths between 7 steps, evenly spaced -->
-                        <path class="flow-path" d="M 100 50 L 300 50" stroke="url(#flowGradient1)" stroke-width="2" fill="none" filter="url(#glow)" />
-                        <path class="flow-path" d="M 300 50 L 500 50" stroke="url(#flowGradient1)" stroke-width="2" fill="none" filter="url(#glow)" />
-                        <path class="flow-path" d="M 500 50 L 700 50" stroke="url(#flowGradient1)" stroke-width="2" fill="none" filter="url(#glow)" />
-                        <path class="flow-path" d="M 700 50 L 900 50" stroke="url(#flowGradient2)" stroke-width="2" fill="none" filter="url(#glow)" />
-                        <path class="flow-path" d="M 900 50 L 1100 50" stroke="url(#flowGradient2)" stroke-width="2" fill="none" filter="url(#glow)" />
-                        <path class="flow-path" d="M 1100 50 L 1300 50" stroke="url(#flowGradient2)" stroke-width="2" fill="none" filter="url(#glow)" />
+                        <path class="flow-path" d="M 100 50 L 300 50" stroke="url(#flowGradient1)" stroke-width="2"
+                            fill="none" filter="url(#glow)" />
+                        <path class="flow-path" d="M 300 50 L 500 50" stroke="url(#flowGradient1)" stroke-width="2"
+                            fill="none" filter="url(#glow)" />
+                        <path class="flow-path" d="M 500 50 L 700 50" stroke="url(#flowGradient1)" stroke-width="2"
+                            fill="none" filter="url(#glow)" />
+                        <path class="flow-path" d="M 700 50 L 900 50" stroke="url(#flowGradient2)" stroke-width="2"
+                            fill="none" filter="url(#glow)" />
+                        <path class="flow-path" d="M 900 50 L 1100 50" stroke="url(#flowGradient2)" stroke-width="2"
+                            fill="none" filter="url(#glow)" />
+                        <path class="flow-path" d="M 1100 50 L 1300 50" stroke="url(#flowGradient2)" stroke-width="2"
+                            fill="none" filter="url(#glow)" />
                         <!-- Animated particles traveling along each segment -->
                         <circle r="4" fill="#6366f1" filter="url(#glow)">
                             <animateMotion dur="2s" repeatCount="indefinite" path="M 100 50 L 300 50" />
@@ -845,15 +812,10 @@
         </div>
     </div>
 
-    <!-- Footer -->
-    <footer class="site-footer">
-        <div class="footer-content">
-            <span class="copyright">© 2026 VARA-AI. </span>
-            <span class="footer-divider">|</span>
-            <span class="footer-tagline">Powered by Gemini & Neo4j</span>
-        </div>
-    </footer>
+    <!-- Shared Footer (injected by navbar.js) -->
+    <div id="footer-placeholder"></div>
 
+    <script src="navbar.js"></script>
     <script src="app.js"></script>
 </body>
 

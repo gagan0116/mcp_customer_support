@@ -19,6 +19,7 @@
             height: 24px;
         }
     </style>
+    <link rel="stylesheet" href="../navbar.css">
     <link rel="stylesheet" href="styles.css">
     <!-- Vis.js for Graph Visualization -->
     <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
@@ -34,47 +35,8 @@
         <div class="orb orb-3"></div>
     </div>
 
-    <!-- Header -->
-    <header class="header">
-        <div class="header-content">
-            <div class="logo">
-                <div class="logo-icon" style="overflow: hidden;">
-                    <img src="favicon.png" alt="Logo" style="width: 100%; height: 100%; object-fit: contain;">
-                </div>
-                <div class="logo-text">
-                    <span class="logo-title">VARA-AI</span>
-                    <span class="logo-subtitle">Policy Compiler Agent</span>
-                </div>
-            </div>
-            <nav class="header-nav">
-                <a href="../" class="nav-link">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-                    </svg>
-                    <span>Email Pipeline</span>
-                </a>
-                <a href="#" class="nav-link active">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="18" cy="5" r="3" />
-                        <circle cx="6" cy="12" r="3" />
-                        <circle cx="18" cy="19" r="3" />
-                        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
-                        <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
-                    </svg>
-                    <span>Policy Knowledge Base</span>
-                </a>
-            </nav>
-            <a href="#" class="help-link" id="helpLink">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                    stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="10" />
-                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-                    <line x1="12" y1="17" x2="12.01" y2="17" />
-                </svg>
-                How it works
-            </a>
-        </div>
-    </header>
+    <!-- Shared Navbar (injected by navbar.js) -->
+    <div id="navbar-placeholder"></div>
 
     <!-- Onboarding Banner -->
     <div class="onboarding-banner" id="onboardingBanner">
@@ -113,8 +75,8 @@
                     </svg>
                 </div>
                 <h2 class="panel-title">Visualize Knowledge Base</h2>
-                <button class="info-icon" data-tooltip="visualize" tabindex="0"
-                    aria-label="Info about visualize">i</button>
+                <button class="info-icon" data-tooltip="visualize"
+                    tabindex="0" aria-label="Info about visualize">i</button>
             </div>
 
             <!-- Visualize Card -->
@@ -141,7 +103,8 @@
                     </svg>
                 </div>
                 <h2 class="panel-title">Policy Upload</h2>
-                <button class="info-icon" data-tooltip="upload" tabindex="0" aria-label="Info about upload">i</button>
+                <button class="info-icon" data-tooltip="upload"
+                    tabindex="0" aria-label="Info about upload">i</button>
             </div>
 
             <!-- Upload Card -->
@@ -203,7 +166,8 @@
                             </svg>
                         </div>
                         <div class="step-content">
-                            <div class="step-name">Document Parsing <button class="info-icon" data-tooltip="kb-parsing"
+                            <div class="step-name">Document Parsing <button class="info-icon"
+                                    data-tooltip="parsing"
                                     tabindex="0" aria-label="Info about parsing">i</button></div>
                             <div class="step-description">Extracting text from PDF documents</div>
                         </div>
@@ -217,7 +181,8 @@
                             </svg>
                         </div>
                         <div class="step-content">
-                            <div class="step-name">Ontology Design <button class="info-icon" data-tooltip="ontology"
+                            <div class="step-name">Ontology Design <button class="info-icon"
+                                    data-tooltip="ontology"
                                     tabindex="0" aria-label="Info about ontology">i</button></div>
                             <div class="step-description">Designing graph schema with Gemini</div>
                         </div>
@@ -232,8 +197,8 @@
                         </div>
                         <div class="step-content">
                             <div class="step-name">Entity Extraction <button class="info-icon"
-                                    data-tooltip="kb-extraction" tabindex="0"
-                                    aria-label="Info about extraction">i</button></div>
+                                    data-tooltip="extraction"
+                                    tabindex="0" aria-label="Info about extraction">i</button></div>
                             <div class="step-description">Extracting entities & relationships</div>
                         </div>
                         <span class="step-status">Pending</span>
@@ -246,7 +211,8 @@
                             </svg>
                         </div>
                         <div class="step-content">
-                            <div class="step-name">Critic Validation <button class="info-icon" data-tooltip="validation"
+                            <div class="step-name">Critic Validation <button class="info-icon"
+                                    data-tooltip="validation"
                                     tabindex="0" aria-label="Info about validation">i</button></div>
                             <div class="step-description">Validating extraction quality</div>
                         </div>
@@ -261,7 +227,8 @@
                             </svg>
                         </div>
                         <div class="step-content">
-                            <div class="step-name">Graph Building <button class="info-icon" data-tooltip="building"
+                            <div class="step-name">Graph Building <button class="info-icon"
+                                    data-tooltip="building"
                                     tabindex="0" aria-label="Info about graph building">i</button></div>
                             <div class="step-description">Constructing Neo4j knowledge graph</div>
                         </div>
@@ -293,10 +260,12 @@
                 </div>
                 <h2 class="panel-title">Knowledge Graph</h2>
                 <div class="graph-stats" id="graph-stats">
-                    Nodes: <span id="node-count">0</span> <button class="info-icon" data-tooltip="node-count"
+                    Nodes: <span id="node-count">0</span> <button class="info-icon"
+                        data-tooltip="nodes"
                         tabindex="0" aria-label="Info about nodes" style="margin-right: 8px;">i</button>| Edges: <span
-                        id="edge-count">0</span> <button class="info-icon" data-tooltip="edge-count" tabindex="0"
-                        aria-label="Info about edges">i</button>
+                        id="edge-count">0</span> <button class="info-icon"
+                        data-tooltip="edges"
+                        tabindex="0" aria-label="Info about edges">i</button>
                 </div>
             </div>
 
@@ -376,12 +345,18 @@
                             </filter>
                         </defs>
                         <!-- 6 connection paths between 7 steps, evenly spaced -->
-                        <path class="flow-path" d="M 100 50 L 300 50" stroke="url(#flowGradient1)" stroke-width="2" fill="none" filter="url(#glow)" />
-                        <path class="flow-path" d="M 300 50 L 500 50" stroke="url(#flowGradient1)" stroke-width="2" fill="none" filter="url(#glow)" />
-                        <path class="flow-path" d="M 500 50 L 700 50" stroke="url(#flowGradient1)" stroke-width="2" fill="none" filter="url(#glow)" />
-                        <path class="flow-path" d="M 700 50 L 900 50" stroke="url(#flowGradient2)" stroke-width="2" fill="none" filter="url(#glow)" />
-                        <path class="flow-path" d="M 900 50 L 1100 50" stroke="url(#flowGradient2)" stroke-width="2" fill="none" filter="url(#glow)" />
-                        <path class="flow-path" d="M 1100 50 L 1300 50" stroke="url(#flowGradient2)" stroke-width="2" fill="none" filter="url(#glow)" />
+                        <path class="flow-path" d="M 100 50 L 300 50" stroke="url(#flowGradient1)" stroke-width="2"
+                            fill="none" filter="url(#glow)" />
+                        <path class="flow-path" d="M 300 50 L 500 50" stroke="url(#flowGradient1)" stroke-width="2"
+                            fill="none" filter="url(#glow)" />
+                        <path class="flow-path" d="M 500 50 L 700 50" stroke="url(#flowGradient1)" stroke-width="2"
+                            fill="none" filter="url(#glow)" />
+                        <path class="flow-path" d="M 700 50 L 900 50" stroke="url(#flowGradient2)" stroke-width="2"
+                            fill="none" filter="url(#glow)" />
+                        <path class="flow-path" d="M 900 50 L 1100 50" stroke="url(#flowGradient2)" stroke-width="2"
+                            fill="none" filter="url(#glow)" />
+                        <path class="flow-path" d="M 1100 50 L 1300 50" stroke="url(#flowGradient2)" stroke-width="2"
+                            fill="none" filter="url(#glow)" />
                         <!-- Animated particles traveling along each segment -->
                         <circle r="4" fill="#6366f1" filter="url(#glow)">
                             <animateMotion dur="2s" repeatCount="indefinite" path="M 100 50 L 300 50" />
@@ -949,14 +924,13 @@
             emptyState.style.display = 'flex';
         });
 
-        // ============================================
-        // Tooltip System - Tap to Reveal
-        // ============================================
-        const TooltipManager = {
-            overlay: null,
-            bubble: null,
-            activeIcon: null,
 
+
+
+        // ============================================
+        // Info Tooltip System
+        // ============================================
+        const InfoTooltip = {
             tooltips: {
                 'visualize': {
                     title: 'Visualize Knowledge Base',
@@ -966,7 +940,7 @@
                     title: 'Policy Upload',
                     text: 'Upload PDF policy documents to be processed and compiled into a queryable knowledge graph.'
                 },
-                'kb-parsing': {
+                'parsing': {
                     title: 'Document Parsing',
                     text: 'Converts uploaded PDF policy documents into machine-readable text using LlamaParse for accurate extraction.'
                 },
@@ -974,7 +948,7 @@
                     title: 'Ontology Design',
                     text: 'AI designs the knowledge graph schema, defining entity types (e.g., Policy, Condition, Action) and their relationships.'
                 },
-                'kb-extraction': {
+                'extraction': {
                     title: 'Entity Extraction',
                     text: 'Extracts specific policy rules, conditions, thresholds, and relationships from the parsed text using LLM.'
                 },
@@ -986,11 +960,11 @@
                     title: 'Graph Building',
                     text: 'Constructs the Neo4j knowledge graph by creating nodes and edges from validated entities and relationships.'
                 },
-                'node-count': {
+                'nodes': {
                     title: 'Node Count',
                     text: 'Total number of entities in the graph (policies, rules, conditions, categories, exceptions, etc.).'
                 },
-                'edge-count': {
+                'edges': {
                     title: 'Edge Count',
                     text: 'Total number of relationships connecting entities, defining how policies relate to conditions and actions.'
                 }
@@ -1005,9 +979,24 @@
                 this.bubble.className = 'tooltip-bubble';
                 document.body.appendChild(this.bubble);
 
-                this.overlay.addEventListener('click', () => this.hide());
+                this.hoverTimeout = null;
+                this.hideTimeout = null;
+                this.isHovering = false;
+                this.triggeredByClick = false;
+
+                this.overlay.addEventListener('click', () => this.forceHide());
                 document.addEventListener('keydown', (e) => {
-                    if (e.key === 'Escape') this.hide();
+                    if (e.key === 'Escape') this.forceHide();
+                });
+
+                document.addEventListener('click', (e) => {
+                    if (this.triggeredByClick && this.activeIcon) {
+                        const clickedIcon = e.target.closest('.info-icon');
+                        const clickedBubble = e.target.closest('.tooltip-bubble');
+                        if (!clickedIcon && !clickedBubble) {
+                            this.forceHide();
+                        }
+                    }
                 });
 
                 document.querySelectorAll('.info-icon').forEach(icon => {
@@ -1018,24 +1007,57 @@
                             this.toggle(e, icon);
                         }
                     });
+
+                    icon.addEventListener('mouseenter', () => {
+                        this.isHovering = true;
+                        if (this.hideTimeout) clearTimeout(this.hideTimeout);
+                        this.hoverTimeout = setTimeout(() => {
+                            if (this.isHovering) this.show(icon, false);
+                        }, 200);
+                    });
+
+                    icon.addEventListener('mouseleave', () => {
+                        this.isHovering = false;
+                        if (this.hoverTimeout) clearTimeout(this.hoverTimeout);
+                        this.hideTimeout = setTimeout(() => {
+                            if (!this.isHovering && !this.triggeredByClick && !this.bubble.matches(':hover')) {
+                                this.hide();
+                            }
+                        }, 300);
+                    });
+                });
+
+                this.bubble.addEventListener('mouseenter', () => {
+                    this.isHovering = true;
+                    if (this.hideTimeout) clearTimeout(this.hideTimeout);
+                });
+
+                this.bubble.addEventListener('mouseleave', () => {
+                    this.isHovering = false;
+                    this.hideTimeout = setTimeout(() => {
+                        if (!this.isHovering && !this.triggeredByClick) this.hide();
+                    }, 300);
                 });
             },
 
             toggle(event, icon) {
                 event.stopPropagation();
-                if (this.activeIcon === icon) {
-                    this.hide();
+                if (this.activeIcon === icon && this.triggeredByClick) {
+                    this.forceHide();
                 } else {
-                    this.show(icon);
+                    this.triggeredByClick = true;
+                    this.show(icon, true);
                 }
             },
 
-            show(icon) {
+            show(icon, fromClick = false) {
                 const tooltipId = icon.getAttribute('data-tooltip');
                 const content = this.tooltips[tooltipId];
                 if (!content) return;
 
-                if (this.activeIcon) {
+                if (this.activeIcon === icon && this.bubble.classList.contains('visible')) return;
+
+                if (this.activeIcon && this.activeIcon !== icon) {
                     this.activeIcon.classList.remove('active');
                 }
 
@@ -1044,44 +1066,73 @@
                     <div class="tooltip-text">${content.text}</div>
                 `;
 
+                // Temporarily make bubble visible off-screen for accurate height measurement
+                this.bubble.style.visibility = 'hidden';
+                this.bubble.style.display = 'block';
+                this.bubble.style.opacity = '0';
+                this.bubble.classList.add('visible');
+
                 const rect = icon.getBoundingClientRect();
                 const bubbleWidth = 320;
-                const bubbleHeight = this.bubble.offsetHeight || 100;
+                const bubbleHeight = this.bubble.offsetHeight;
                 const padding = 12;
 
+                // Default: show below the icon
                 let left = rect.left;
                 let top = rect.bottom + padding;
+
+                // Reset arrow classes
+                this.bubble.classList.remove('arrow-right', 'arrow-bottom');
 
                 if (left + bubbleWidth > window.innerWidth - padding) {
                     left = window.innerWidth - bubbleWidth - padding;
                     this.bubble.classList.add('arrow-right');
-                } else {
-                    this.bubble.classList.remove('arrow-right');
                 }
 
+                // Only show above if there's truly no room below
                 if (top + bubbleHeight > window.innerHeight - padding) {
                     top = rect.top - bubbleHeight - padding;
                     this.bubble.classList.add('arrow-bottom');
-                } else {
-                    this.bubble.classList.remove('arrow-bottom');
                 }
 
                 this.bubble.style.left = `${Math.max(padding, left)}px`;
                 this.bubble.style.top = `${Math.max(padding, top)}px`;
 
-                this.overlay.classList.remove('hidden');
+                // Restore visibility
+                this.bubble.style.visibility = '';
+                this.bubble.style.display = '';
+                this.bubble.style.opacity = '';
+
+                if (fromClick) {
+                    this.overlay.classList.remove('hidden');
+                    this.triggeredByClick = true;
+                } else {
+                    this.overlay.classList.add('hidden');
+                    this.triggeredByClick = false;
+                }
+
                 this.bubble.classList.add('visible');
                 icon.classList.add('active');
                 this.activeIcon = icon;
             },
 
             hide() {
+                if (this.triggeredByClick && this.isHovering) return;
+                this._doHide();
+            },
+
+            forceHide() {
+                this._doHide();
+            },
+
+            _doHide() {
                 this.overlay.classList.add('hidden');
                 this.bubble.classList.remove('visible');
                 if (this.activeIcon) {
                     this.activeIcon.classList.remove('active');
                     this.activeIcon = null;
                 }
+                this.triggeredByClick = false;
             }
         };
 
@@ -1108,8 +1159,8 @@
         }
 
         document.addEventListener('DOMContentLoaded', () => {
-            TooltipManager.init();
             initOnboarding();
+            InfoTooltip.init();
 
             // HLD Modal Logic
             const hldModal = document.getElementById('hldModal');
@@ -1189,14 +1240,9 @@
         });
     </script>
 
-    <!-- Footer -->
-    <footer class="site-footer">
-        <div class="footer-content">
-            <span class="copyright">© 2026 VARA-AI. </span>
-            <span class="footer-divider">|</span>
-            <span class="footer-tagline">Powered by Gemini & Neo4j</span>
-        </div>
-    </footer>
+    <!-- Shared Footer (injected by navbar.js) -->
+    <div id="footer-placeholder"></div>
+    <script src="../navbar.js"></script>
 </body>
 
 </html>

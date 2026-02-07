@@ -296,6 +296,9 @@ function base64ToBlob(base64, mimeType) {
 async function handleSubmit() {
     if (state.isProcessing || !state.selectedScenario) return;
 
+    // Reset pipeline to clear previous scenario results
+    resetPipeline();
+
     // Start processing
     state.isProcessing = true;
     state.pipelineStep = 0;
@@ -1194,33 +1197,44 @@ const TooltipManager = {
             <div class="tooltip-text">${content.text}</div>
         `;
 
+        // Temporarily make bubble visible off-screen for accurate height measurement
+        this.bubble.style.visibility = 'hidden';
+        this.bubble.style.display = 'block';
+        this.bubble.style.opacity = '0';
+        this.bubble.classList.add('visible');
+
         // Position the bubble
         const rect = icon.getBoundingClientRect();
         const bubbleWidth = 320;
-        const bubbleHeight = this.bubble.offsetHeight || 100;
+        const bubbleHeight = this.bubble.offsetHeight;
         const padding = 12;
 
+        // Default: show below the icon
         let left = rect.left;
         let top = rect.bottom + padding;
+
+        // Reset arrow classes
+        this.bubble.classList.remove('arrow-right', 'arrow-bottom');
 
         // Adjust horizontal position if off-screen
         if (left + bubbleWidth > window.innerWidth - padding) {
             left = window.innerWidth - bubbleWidth - padding;
             this.bubble.classList.add('arrow-right');
-        } else {
-            this.bubble.classList.remove('arrow-right');
         }
 
-        // If tooltip would go below viewport, show above instead
+        // Only show above if there's truly no room below
         if (top + bubbleHeight > window.innerHeight - padding) {
             top = rect.top - bubbleHeight - padding;
             this.bubble.classList.add('arrow-bottom');
-        } else {
-            this.bubble.classList.remove('arrow-bottom');
         }
 
         this.bubble.style.left = `${Math.max(padding, left)}px`;
         this.bubble.style.top = `${Math.max(padding, top)}px`;
+
+        // Restore visibility
+        this.bubble.style.visibility = '';
+        this.bubble.style.display = '';
+        this.bubble.style.opacity = '';
 
         // Only show overlay on click (not hover) to prevent flickering
         if (fromClick) {
