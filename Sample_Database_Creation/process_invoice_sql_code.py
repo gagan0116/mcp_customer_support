@@ -310,7 +310,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("invoice_pdf", help="Path to a single invoice PDF")
     ap.add_argument("--out", default="single_invoice_inserts.sql", help="Output SQL file")
-    ap.add_argument("--model", default="gemini-3-flash", help="Gemini model name")
+    ap.add_argument("--model", default="gemini-2.5-flash", help="Gemini model name")
     args = ap.parse_args()
 
     api_key = os.getenv("GEMINI_API_KEY")

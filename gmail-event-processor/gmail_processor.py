@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 from bs4 import BeautifulSoup
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from google.oauth2.credentials import Credentials
 
 from secret_manager import load_gmail_token
@@ -146,11 +147,17 @@ def process_new_emails():
         for msg in h.get("messagesAdded", []):
             msg_id = msg["message"]["id"]
 
-            email = service.users().messages().get(
-                userId="me",
-                id=msg_id,
-                format="full",
-            ).execute()
+            try:
+                email = service.users().messages().get(
+                    userId="me",
+                    id=msg_id,
+                    format="full",
+                ).execute()
+            except HttpError as error:
+                if error.resp.status == 404:
+                    print(f"⚠️ Message {msg_id} not found (likely deleted). Skipping.")
+                    continue
+                raise error
 
             headers = {
                 h["name"].lower(): h["value"]
