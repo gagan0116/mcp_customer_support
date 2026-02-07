@@ -1184,6 +1184,12 @@ const TooltipManager = {
 
         this.bubble.style.left = `${Math.max(padding, left)}px`;
         this.bubble.style.top = `${Math.max(padding, top)}px`;
+
+        // Point arrow at the icon center
+        const iconCenterX = rect.left + rect.width / 2 + window.scrollX;
+        const bubbleLeft = Math.max(padding, left);
+        const arrowOffset = Math.max(10, Math.min(iconCenterX - bubbleLeft - 6, bubbleWidth - 22));
+        this.bubble.style.setProperty('--arrow-left', `${arrowOffset}px`);
     },
 
     show(icon, fromClick = false) {

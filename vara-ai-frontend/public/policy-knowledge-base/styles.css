@@ -802,7 +802,7 @@ body {
     content: '';
     position: absolute;
     top: -6px;
-    left: 20px;
+    left: var(--arrow-left, 20px);
     width: 12px;
     height: 12px;
     background: var(--bg-secondary);
@@ -812,8 +812,8 @@ body {
 }
 
 .tooltip-bubble.arrow-right::before {
-    left: auto;
-    right: 20px;
+    left: var(--arrow-left, auto);
+    right: auto;
 }
 
 .tooltip-bubble.arrow-bottom::before {
