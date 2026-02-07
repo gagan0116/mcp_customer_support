@@ -79,6 +79,10 @@ html {
     scroll-behavior: smooth;
 }
 
+html {
+    overflow-x: hidden;
+}
+
 body {
     font-family: var(--font-family);
     background: var(--bg-primary);
@@ -87,6 +91,9 @@ body {
     min-height: 100vh;
     overflow-x: hidden;
     overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
 }
 
 /* Background Effects */
@@ -196,6 +203,7 @@ body {
     grid-template-columns: 420px 1fr;
     gap: var(--spacing-xl);
     min-height: calc(100vh - 80px);
+    flex: 1;
     box-sizing: border-box;
 }
 

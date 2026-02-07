@@ -93,4 +93,27 @@
             document.body.insertAdjacentHTML('beforeend', footerHTML);
         }
     }
+
+    // ── Hide navbar on scroll-down, show on scroll-up / at top ──
+    const header = document.querySelector('.header');
+    if (header) {
+        let ticking = false;
+
+        window.addEventListener('scroll', () => {
+            if (!ticking) {
+                requestAnimationFrame(() => {
+                    const currentScrollY = window.scrollY;
+                    if (currentScrollY <= 0) {
+                        // At the very top — show navbar
+                        header.classList.remove('header-hidden');
+                    } else {
+                        // Any scroll away from top — hide navbar
+                        header.classList.add('header-hidden');
+                    }
+                    ticking = false;
+                });
+                ticking = true;
+            }
+        }, { passive: true });
+    }
 })();
