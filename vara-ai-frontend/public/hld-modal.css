@@ -876,6 +876,10 @@
         font-size: var(--font-size-xs);
     }
 
+    .hld-step-tooltip h4 {
+        font-size: var(--font-size-xs);
+    }
+
     .hld-step-badge {
         font-size: 9px;
         padding: 3px 8px;
@@ -904,6 +908,10 @@
     }
 
     .hld-step-label {
+        font-size: 13px;
+    }
+
+    .hld-step-tooltip h4 {
         font-size: 13px;
     }
 
@@ -967,6 +975,10 @@
     }
 
     .hld-step-label {
+        font-size: 12px;
+    }
+
+    .hld-step-tooltip h4 {
         font-size: 12px;
     }
 

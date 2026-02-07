@@ -740,24 +740,11 @@
                     icon.addEventListener('mouseleave', () => {
                         this.isHovering = false;
                         if (this.hoverTimeout) clearTimeout(this.hoverTimeout);
-                        this.hideTimeout = setTimeout(() => {
-                            if (!this.isHovering && !this.triggeredByClick && !this.bubble.matches(':hover')) {
-                                this.hide();
-                            }
-                        }, 300);
+                        // Hide immediately when hover-triggered
+                        if (!this.triggeredByClick) {
+                            this.hide();
+                        }
                     });
-                });
-
-                this.bubble.addEventListener('mouseenter', () => {
-                    this.isHovering = true;
-                    if (this.hideTimeout) clearTimeout(this.hideTimeout);
-                });
-
-                this.bubble.addEventListener('mouseleave', () => {
-                    this.isHovering = false;
-                    this.hideTimeout = setTimeout(() => {
-                        if (!this.isHovering && !this.triggeredByClick) this.hide();
-                    }, 300);
                 });
             },
 
@@ -798,21 +785,22 @@
                 const bubbleHeight = this.bubble.offsetHeight;
                 const padding = 12;
 
-                // Default: show below the icon
-                let left = rect.left;
-                let top = rect.bottom + padding;
+                // Document-relative coords (position:absolute on body)
+                let left = rect.left + window.scrollX;
+                let top = rect.bottom + padding + window.scrollY;
 
                 // Reset arrow classes
                 this.bubble.classList.remove('arrow-right', 'arrow-bottom');
 
-                if (left + bubbleWidth > window.innerWidth - padding) {
-                    left = window.innerWidth - bubbleWidth - padding;
+                // Check right-edge overflow (viewport-relative)
+                if (rect.left + bubbleWidth > window.innerWidth - padding) {
+                    left = window.innerWidth - bubbleWidth - padding + window.scrollX;
                     this.bubble.classList.add('arrow-right');
                 }
 
-                // Only show above if there's truly no room below
-                if (top + bubbleHeight > window.innerHeight - padding) {
-                    top = rect.top - bubbleHeight - padding;
+                // Show above if no room below (viewport-relative)
+                if (rect.bottom + padding + bubbleHeight > window.innerHeight - padding) {
+                    top = rect.top - bubbleHeight - padding + window.scrollY;
                     this.bubble.classList.add('arrow-bottom');
                 }
 

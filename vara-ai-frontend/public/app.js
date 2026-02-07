@@ -1137,40 +1137,12 @@ const TooltipManager = {
                 if (this.hoverTimeout) {
                     clearTimeout(this.hoverTimeout);
                 }
-                // Small delay before hiding to allow moving to tooltip
-                this.hideTimeout = setTimeout(() => {
-                    if (!this.isHovering && !this.triggeredByClick && !this.bubble.matches(':hover')) {
-                        this.hide();
-                    }
-                }, 300);
-            });
-        });
-
-        // Allow hovering over the tooltip bubble itself
-        this.bubble.addEventListener('mouseenter', () => {
-            this.isHovering = true;
-            if (this.hideTimeout) {
-                clearTimeout(this.hideTimeout);
-            }
-        });
-
-        this.bubble.addEventListener('mouseleave', () => {
-            this.isHovering = false;
-            this.hideTimeout = setTimeout(() => {
-                if (!this.isHovering && !this.triggeredByClick) {
+                // Hide immediately when hover-triggered
+                if (!this.triggeredByClick) {
                     this.hide();
                 }
-            }, 300);
+            });
         });
-
-        // Continuously reposition tooltip via rAF so it tracks the icon during scroll
-        this._rafId = null;
-        this._trackPosition = () => {
-            if (this.activeIcon && this.bubble.classList.contains('visible')) {
-                this._position(this.activeIcon);
-                this._rafId = requestAnimationFrame(this._trackPosition);
-            }
-        };
     },
 
     toggle(event, icon) {
@@ -1184,27 +1156,29 @@ const TooltipManager = {
         }
     },
 
-    // Separate positioning logic so it can be called on scroll
+    // Position tooltip using document-relative coords (position:absolute on body)
     _position(icon) {
         const rect = icon.getBoundingClientRect();
         const bubbleWidth = 320;
         const bubbleHeight = this.bubble.offsetHeight;
         const padding = 12;
 
-        // Use viewport-relative coords (position:fixed)
-        let left = rect.left;
-        let top = rect.bottom + padding;
+        // Convert viewport coords to document coords
+        let left = rect.left + window.scrollX;
+        let top = rect.bottom + padding + window.scrollY;
 
         // Reset arrow classes
         this.bubble.classList.remove('arrow-right', 'arrow-bottom');
 
-        if (left + bubbleWidth > window.innerWidth - padding) {
-            left = window.innerWidth - bubbleWidth - padding;
+        // Check right-edge overflow (viewport-relative)
+        if (rect.left + bubbleWidth > window.innerWidth - padding) {
+            left = window.innerWidth - bubbleWidth - padding + window.scrollX;
             this.bubble.classList.add('arrow-right');
         }
 
-        if (top + bubbleHeight > window.innerHeight - padding) {
-            top = rect.top - bubbleHeight - padding;
+        // Check bottom overflow — show above if no room below (viewport-relative)
+        if (rect.bottom + padding + bubbleHeight > window.innerHeight - padding) {
+            top = rect.top - bubbleHeight - padding + window.scrollY;
             this.bubble.classList.add('arrow-bottom');
         }
 
@@ -1242,10 +1216,6 @@ const TooltipManager = {
 
         this._position(icon);
 
-        // Start tracking position
-        if (this._rafId) cancelAnimationFrame(this._rafId);
-        this._rafId = requestAnimationFrame(this._trackPosition);
-
         // Restore visibility
         this.bubble.style.visibility = '';
         this.bubble.style.display = '';
@@ -1279,10 +1249,6 @@ const TooltipManager = {
     },
 
     _doHide() {
-        if (this._rafId) {
-            cancelAnimationFrame(this._rafId);
-            this._rafId = null;
-        }
         this.overlay.classList.add('hidden');
         this.bubble.classList.remove('visible');
         if (this.activeIcon) {
