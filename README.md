@@ -313,7 +313,7 @@ mcp_customer_support/
 ├── mcp_client.py                    # 🧪 Interactive MCP client
 ├── requirements.txt                 # Python dependencies
 ├── Dockerfile                       # Container configuration
-├── cloudbuild.yaml                  # Gmail processor deployment
+├── cloudbuild_gmail_processor.yaml                  # Gmail processor deployment
 ├── cloudbuild_mcp_processor.yaml    # MCP processor deployment
 └── cloudbuild_policy_compiler.yaml  # Policy compiler deployment
 ```
