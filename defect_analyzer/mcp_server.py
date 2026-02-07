@@ -104,7 +104,11 @@ async def analyze_defect_image(
         # Send to Gemini 3 (new SDK pattern)
         response = client.models.generate_content(
             model="gemini-3-pro-preview",
-            contents=[ANALYSIS_PROMPT, image_part]
+            contents=[ANALYSIS_PROMPT, image_part],
+            config=types.GenerateContentConfig(
+                media_resolution="high",
+                temperature=1.0
+            )
         )
         
         description = response.text.strip()
