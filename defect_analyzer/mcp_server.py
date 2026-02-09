@@ -7,12 +7,12 @@ Uses the new google.genai SDK for Gemini 3 compatibility.
 import os
 import base64
 import json
-from dotenv import load_dotenv
+# from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 from google import genai
 from google.genai import types
 
-load_dotenv()
+# load_dotenv()
 
 mcp = FastMCP("defect_analyzer")
 
@@ -61,7 +61,7 @@ async def analyze_defect_image(
     
     try:
         # Check if API key is valid
-        api_key = os.getenv("GEMINI_API_KEY")
+        api_key = "AIzaSyAjAWm5r-pm_lQC_5EyjDCbenhDBWcqGKY"
         if not api_key:
             return json.dumps({
                 "description": "Error: GEMINI_API_KEY not found in environment variables.",
@@ -103,10 +103,10 @@ async def analyze_defect_image(
         
         # Send to Gemini 3 (new SDK pattern)
         response = client.models.generate_content(
-            model="gemini-3-pro-image-preview",
+            model="gemini-3-pro-preview",
             contents=[ANALYSIS_PROMPT, image_part],
             config=types.GenerateContentConfig(
-                media_resolution="high",
+                media_resolution=types.MediaResolution.MEDIA_RESOLUTION_HIGH,
                 temperature=1.0
             )
         )
