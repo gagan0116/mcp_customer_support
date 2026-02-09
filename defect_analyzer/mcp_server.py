@@ -12,7 +12,7 @@ from mcp.server.fastmcp import FastMCP
 from google import genai
 from google.genai import types
 
-# load_dotenv()
+load_dotenv()
 
 mcp = FastMCP("defect_analyzer")
 
@@ -61,7 +61,7 @@ async def analyze_defect_image(
     
     try:
         # Check if API key is valid
-        api_key = "AIzaSyAjAWm5r-pm_lQC_5EyjDCbenhDBWcqGKY"
+        api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
             return json.dumps({
                 "description": "Error: GEMINI_API_KEY not found in environment variables.",
