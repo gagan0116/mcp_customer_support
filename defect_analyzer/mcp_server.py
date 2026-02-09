@@ -7,7 +7,7 @@ Uses the new google.genai SDK for Gemini 3 compatibility.
 import os
 import base64
 import json
-# from dotenv import load_dotenv
+from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 from google import genai
 from google.genai import types
